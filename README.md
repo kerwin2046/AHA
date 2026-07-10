@@ -11,13 +11,7 @@
 
 名字来自一声「啊？」——遇到陌生标识符时，脑子里自然的反应。
 
-<p align="center">
-  <img src="public/ah.png" alt="复制即解释 — 桌面通知" width="720" />
-</p>
-
-<p align="center">
-  <img src="public/ah-p.png" alt="ah dashboard — 历史记录" width="720" />
-</p>
+<img width="3024" height="1864" alt="image" src="https://github.com/user-attachments/assets/4213c8a5-987d-472f-adb1-76e8ca3aa3b8" />
 
 ## 快速开始
 
