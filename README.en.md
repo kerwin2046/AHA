@@ -11,6 +11,14 @@ without leaving your terminal.
 
 Named after that instinctive "ah?" — the moment you hit an unfamiliar identifier.
 
+<p align="center">
+  <img src="public/ah.png" alt="Copy to explain — desktop notification" width="720" />
+</p>
+
+<p align="center">
+  <img src="public/ah-p.png" alt="ah dashboard — history" width="720" />
+</p>
+
 ## Quick Start
 
 ```bash
