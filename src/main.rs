@@ -11,6 +11,7 @@ mod render;
 mod filter;
 mod notify_guard;
 mod selection;
+mod web;
 
 use anyhow::Result;
 use clap::Parser;
@@ -57,6 +58,7 @@ async fn main() -> Result<()> {
             json,
         } => cmd_history(limit, search, stats, clear, json).await,
         Command::Tui => tui::run().await,
+        Command::Web { port } => web::serve(port).await,
     };
 
     if let Err(e) = result {

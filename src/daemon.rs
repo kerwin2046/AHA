@@ -203,11 +203,24 @@ fn short_title(s: &str) -> String {
 }
 
 pub(crate) fn show_notification(summary: &str, body: &str) {
-    let _ = notify_rust::Notification::new()
-        .summary(summary)
-        .body(body)
-        .appname("ah")
-        .icon("terminal")
-        .timeout(notify_rust::Timeout::Milliseconds(5000))
-        .show();
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("osascript")
+            .args(["-e", &format!(
+                "display notification \"{}\" with title \"{}\"",
+                body.replace('"', "\\\""),
+                summary.replace('"', "\\\""),
+            )])
+            .output();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = notify_rust::Notification::new()
+            .summary(summary)
+            .body(body)
+            .appname("ah")
+            .icon("terminal")
+            .timeout(notify_rust::Timeout::Milliseconds(5000))
+            .show();
+    }
 }

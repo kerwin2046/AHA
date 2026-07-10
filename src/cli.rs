@@ -99,4 +99,10 @@ pub enum Command {
     },
     /// Interactive TUI browser for history
     Tui,
+    /// Launch web dashboard for viewing history
+    Web {
+        /// Port to listen on
+        #[arg(short, long, default_value = "9876")]
+        port: u16,
+    },
 }
