@@ -30,6 +30,8 @@ pub struct SourceContext {
     pub surrounding: Vec<String>,
     /// Target translation language, e.g. "中文", "日本語", "English"
     pub to_lang: String,
+    /// Active app context (auto-detected), e.g. "Code", "Terminal"
+    pub app_context: Option<String>,
 }
 
 /// Build the AI prompt.
@@ -66,6 +68,9 @@ fn build_short_prompt(ctx: &SourceContext) -> String {
     prompt.push_str("You are a code assistant. The user copied this from their editor:\n\n");
     prompt.push_str(&format!("```\n{}\n```\n\n", ctx.word));
 
+    if let Some(ref app) = ctx.app_context {
+        prompt.push_str(&format!("App: {app}\n"));
+    }
     append_file_context(&mut prompt, ctx);
 
     prompt.push_str(
@@ -97,6 +102,9 @@ fn build_detailed_prompt(ctx: &SourceContext) -> String {
     prompt.push_str("You are a code assistant. The user wants a detailed explanation of this code:\n\n");
     prompt.push_str(&format!("```\n{}\n```\n\n", ctx.word));
 
+    if let Some(ref app) = ctx.app_context {
+        prompt.push_str(&format!("App: {app}\n"));
+    }
     append_file_context(&mut prompt, ctx);
 
     prompt.push_str(

@@ -146,9 +146,12 @@ async fn process_clipboard_inner(
     };
     println!("{line_hint}");
 
+    let active_ctx = crate::context::detect_context();
     let ctx = crate::explain::SourceContext {
         word: word.to_string(),
         to_lang: "中文".to_string(),
+        language: active_ctx.language.clone(),
+        app_context: active_ctx.app_name.clone(),
         ..Default::default()
     };
 

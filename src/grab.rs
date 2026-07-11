@@ -21,10 +21,13 @@ pub async fn run_grab(config: &Config, source: &str, expand: bool, quiet: bool) 
     let provider = crate::providers::resolve_provider(None, config).await?;
     let provider_name = provider.name().to_string();
 
+    let active_ctx = crate::context::detect_context();
     let result = crate::explain::explain(
         &crate::explain::SourceContext {
             word: word.clone(),
             to_lang: "中文".to_string(),
+            language: active_ctx.language.clone(),
+            app_context: active_ctx.app_name.clone(),
             ..Default::default()
         },
         provider.as_ref(),

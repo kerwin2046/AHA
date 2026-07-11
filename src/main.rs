@@ -12,6 +12,7 @@ mod filter;
 mod notify_guard;
 mod selection;
 mod web;
+mod context;
 
 use anyhow::Result;
 use clap::Parser;
@@ -163,6 +164,7 @@ fn build_file_context(spec: &str, context_lines: usize, to_lang: &str) -> Result
             language,
             surrounding,
             to_lang: to_lang.to_string(),
+            ..Default::default()
         })
     } else {
         let word = first_identifier_in_file(&lines).unwrap_or_else(|| {
