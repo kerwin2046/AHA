@@ -60,16 +60,25 @@ fn render_html(result: &ExplainResult) {
 
     if !result.translation.is_empty() {
         println!("<h2>翻译</h2>");
-        println!("<p class=\"translation\">{}</p>", escape_html(&result.translation));
+        println!(
+            "<p class=\"translation\">{}</p>",
+            escape_html(&result.translation)
+        );
     }
 
     if !result.full_name.is_empty() {
-        println!("<p class=\"meta\"><strong>全称:</strong> {}</p>", escape_html(&result.full_name));
+        println!(
+            "<p class=\"meta\"><strong>全称:</strong> {}</p>",
+            escape_html(&result.full_name)
+        );
     }
 
     if !result.explanation.is_empty() {
         println!("<h2>解释</h2>");
-        println!("<p class=\"explanation\">{}</p>", escape_html(&result.explanation));
+        println!(
+            "<p class=\"explanation\">{}</p>",
+            escape_html(&result.explanation)
+        );
     }
 
     if !result.usage.is_empty() {
@@ -91,9 +100,7 @@ fn render_terminal(result: &ExplainResult) {
     let term_width = terminal_width();
     let opts = Options::new(term_width).break_words(true);
 
-    let divider: String = std::iter::repeat('─')
-        .take(term_width.min(48))
-        .collect();
+    let divider: String = std::iter::repeat('─').take(term_width.min(48)).collect();
     println!("{}", divider.dimmed());
 
     if !result.translation.is_empty() {

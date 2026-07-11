@@ -40,7 +40,11 @@ fn get_frontmost_app() -> Option<String> {
         .ok()?;
     if output.status.success() {
         let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !s.is_empty() { Some(s) } else { None }
+        if !s.is_empty() {
+            Some(s)
+        } else {
+            None
+        }
     } else {
         None
     }
@@ -50,10 +54,27 @@ fn get_frontmost_app() -> Option<String> {
 fn get_window_title(app: &str) -> Option<String> {
     // Only try for known apps that show file paths in window titles
     let title_apps = [
-        "Code", "Cursor", "Windsurf", "VSCodium", "Zed", "Sublime Text",
-        "IntelliJ IDEA", "CLion", "PyCharm", "GoLand", "WebStorm", "RubyMine",
-        "Android Studio", "Xcode", "TextEdit",
-        "Terminal", "iTerm2", "Warp", "Ghostty", "Kitty", "tmux",
+        "Code",
+        "Cursor",
+        "Windsurf",
+        "VSCodium",
+        "Zed",
+        "Sublime Text",
+        "IntelliJ IDEA",
+        "CLion",
+        "PyCharm",
+        "GoLand",
+        "WebStorm",
+        "RubyMine",
+        "Android Studio",
+        "Xcode",
+        "TextEdit",
+        "Terminal",
+        "iTerm2",
+        "Warp",
+        "Ghostty",
+        "Kitty",
+        "tmux",
     ];
 
     if !title_apps.iter().any(|a| app.contains(a)) {
@@ -74,7 +95,11 @@ fn get_window_title(app: &str) -> Option<String> {
         .ok()?;
     if output.status.success() {
         let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !s.is_empty() { Some(s) } else { None }
+        if !s.is_empty() {
+            Some(s)
+        } else {
+            None
+        }
     } else {
         None
     }
@@ -130,20 +155,32 @@ fn detect_language_from_title(title: &str, app: &str) -> Option<String> {
     }
 
     // Fall back to app-based detection
-    Some(match app {
-        a if a.contains("Xcode") => "Swift",
-        a if a.contains("IntelliJ") || a.contains("CLion") || a.contains("PyCharm")
-            || a.contains("GoLand") || a.contains("WebStorm") || a.contains("RubyMine") => {
-            // These IDEs typically show the file extension in the title
-            // We already tried extension extraction above
-            return None;
+    Some(
+        match app {
+            a if a.contains("Xcode") => "Swift",
+            a if a.contains("IntelliJ")
+                || a.contains("CLion")
+                || a.contains("PyCharm")
+                || a.contains("GoLand")
+                || a.contains("WebStorm")
+                || a.contains("RubyMine") =>
+            {
+                // These IDEs typically show the file extension in the title
+                // We already tried extension extraction above
+                return None;
+            }
+            a if a.contains("Terminal")
+                || a.contains("iTerm2")
+                || a.contains("Warp")
+                || a.contains("Ghostty")
+                || a.contains("Kitty") =>
+            {
+                return None; // Terminal could be anything
+            }
+            _ => return None,
         }
-        a if a.contains("Terminal") || a.contains("iTerm2") || a.contains("Warp")
-            || a.contains("Ghostty") || a.contains("Kitty") => {
-            return None; // Terminal could be anything
-        }
-        _ => return None,
-    }.to_string())
+        .to_string(),
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -151,7 +188,9 @@ fn extract_extension(title: &str) -> Option<String> {
     // Find patterns like "main.rs", "App.tsx", "Dockerfile" in the title
     for word in title.split(&[' ', '—', '-', '/', '\\', '(', ')', '[', ']', '"', '\''][..]) {
         let word = word.trim();
-        if word.is_empty() { continue; }
+        if word.is_empty() {
+            continue;
+        }
         if let Some(dot) = word.rfind('.') {
             let ext = word[dot + 1..].to_lowercase();
             if ext.len() <= 5 && ext.chars().all(|c| c.is_ascii_alphabetic()) {
@@ -238,6 +277,4 @@ mod tests {
         assert_eq!(extension_to_language("dockerfile"), Some("Dockerfile"));
         assert_eq!(extension_to_language("unknown"), None);
     }
-
-
 }

@@ -10,6 +10,8 @@ pub struct Config {
     pub capture: CaptureConfig,
     #[serde(default)]
     pub display: DisplayConfig,
+    #[serde(default)]
+    pub search: SearchConfig,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -52,6 +54,24 @@ pub struct MockConfig {
 pub struct CaptureConfig {
     #[serde(default = "default_context_lines")]
     pub context_lines: usize,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[allow(dead_code)]
+pub struct SearchConfig {
+    /// SearXNG instance URL, e.g. http://localhost:8888
+    #[serde(default = "default_searxng_url")]
+    pub searxng_url: String,
+    /// Max results to fetch per query
+    #[serde(default = "default_search_results")]
+    pub max_results: usize,
+}
+
+fn default_searxng_url() -> String {
+    "http://localhost:8888".to_string()
+}
+fn default_search_results() -> usize {
+    5
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -105,6 +125,10 @@ impl Default for Config {
             display: DisplayConfig {
                 format: default_format(),
                 theme: default_theme(),
+            },
+            search: SearchConfig {
+                searxng_url: default_searxng_url(),
+                max_results: default_search_results(),
             },
         }
     }

@@ -1,18 +1,19 @@
 mod cli;
 mod config;
-mod explain;
-mod providers;
-mod error;
-mod tui;
+mod context;
 mod daemon;
+mod error;
+mod explain;
+mod filter;
 mod grab;
 mod history;
-mod render;
-mod filter;
 mod notify_guard;
+mod providers;
+mod render;
+mod search;
 mod selection;
+mod tui;
 mod web;
-mod context;
 
 use anyhow::Result;
 use clap::Parser;
@@ -31,12 +32,17 @@ async fn main() -> Result<()> {
             provider,
             context,
             expand,
+            diagnose,
+            search,
             json,
             format,
             to,
         } => {
             let fmt = if json { "json".to_string() } else { format };
-            cmd_explain(word, pipe, file, provider, context, expand, fmt, to, &config).await
+            cmd_explain(
+                word, pipe, file, provider, context, expand, diagnose, search, fmt, to, &config,
+            )
+            .await
         }
         Command::Ask => cmd_ask(&config).await,
         Command::Daemon => daemon::run_daemon(&config).await,
@@ -56,8 +62,10 @@ async fn main() -> Result<()> {
             search,
             stats,
             clear,
+            weekly,
+            review,
             json,
-        } => cmd_history(limit, search, stats, clear, json).await,
+        } => cmd_history(limit, search, stats, clear, weekly, review, json).await,
         Command::Tui => tui::run().await,
         Command::Web { port } => web::serve(port).await,
     };
@@ -76,16 +84,36 @@ async fn cmd_explain(
     provider_name: Option<String>,
     context_lines: usize,
     expand: bool,
+    diagnose: bool,
+    do_search: bool,
     format: String,
     to_lang: String,
     config: &Config,
 ) -> Result<()> {
-    let ctx = resolve_input(word, pipe, file, context_lines, &to_lang)?;
+    let mut ctx = resolve_input(word, pipe, file, context_lines, &to_lang)?;
+
+    // Web search: auto-enable for error diagnosis
+    let run_search = do_search || diagnose;
+    if run_search {
+        let url = &config.search.searxng_url;
+        let max = config.search.max_results;
+        println!("🔍 Searching the web...");
+        match crate::search::search_searxng(url, &ctx.word, max).await {
+            Ok(results) => {
+                println!("   Found {} results", results.len());
+                ctx.search_results = results;
+            }
+            Err(e) => {
+                eprintln!("   Search unavailable: {e}");
+                eprintln!("   (install SearXNG: docker run -d -p 8888:8080 searxng/searxng)");
+            }
+        }
+    }
 
     let provider = providers::resolve_provider(provider_name.as_deref(), config).await?;
     let provider_name = provider.name().to_string();
 
-    let result = explain::explain(&ctx, provider.as_ref(), expand).await?;
+    let result = explain::explain(&ctx, provider.as_ref(), expand, diagnose).await?;
 
     let _ = history::save_query(
         &ctx.word,
@@ -123,8 +151,8 @@ fn resolve_input(
         });
     }
 
-    let word = word
-        .ok_or_else(|| anyhow::anyhow!("Provide a word: ah explain <word> or use --pipe"))?;
+    let word =
+        word.ok_or_else(|| anyhow::anyhow!("Provide a word: ah explain <word> or use --pipe"))?;
     Ok(explain::SourceContext {
         word,
         to_lang: to_lang.to_string(),
@@ -143,7 +171,11 @@ fn read_word_from_stdin() -> Result<String> {
     Ok(trimmed)
 }
 
-fn build_file_context(spec: &str, context_lines: usize, to_lang: &str) -> Result<explain::SourceContext> {
+fn build_file_context(
+    spec: &str,
+    context_lines: usize,
+    to_lang: &str,
+) -> Result<explain::SourceContext> {
     let (path, line) = parse_file_spec(spec);
     let content = std::fs::read_to_string(path)?;
     let lines: Vec<&str> = content.lines().collect();
@@ -154,7 +186,9 @@ fn build_file_context(spec: &str, context_lines: usize, to_lang: &str) -> Result
             anyhow::bail!("Line {n} out of range (file has {} lines)", lines.len());
         }
         let line_content = lines[n - 1].trim();
-        let word = extract_identifier(line_content).unwrap_or(line_content).to_string();
+        let word = extract_identifier(line_content)
+            .unwrap_or(line_content)
+            .to_string();
         let surrounding = surrounding_lines(&lines, n, context_lines);
 
         Ok(explain::SourceContext {
@@ -249,8 +283,10 @@ async fn cmd_ask(config: &Config) -> Result<()> {
             },
             provider.as_ref(),
             false,
+            false,
         )
-        .await {
+        .await
+        {
             Ok(result) => {
                 let _ = history::save_query(
                     word,
@@ -318,11 +354,54 @@ async fn cmd_history(
     search: Option<String>,
     stats: bool,
     clear: bool,
+    weekly: bool,
+    review: bool,
     json: bool,
 ) -> Result<()> {
     if clear {
         let count = history::clear_history()?;
         println!("Cleared {count} history entries.");
+        return Ok(());
+    }
+
+    if weekly {
+        let weeks = history::query_weekly()?;
+        if json {
+            println!("{}", serde_json::to_string_pretty(&weeks)?);
+            return Ok(());
+        }
+        if weeks.is_empty() {
+            println!("📅 本周还没有查询记录。");
+            return Ok(());
+        }
+        let total_unique: usize = weeks.iter().map(|d| d.words.len()).sum();
+        let total_queries: i64 = weeks.iter().map(|d| d.total).sum();
+        println!("📅 本周学习记录（共 {total_queries} 次，{total_unique} 个词）\n");
+        for day in &weeks {
+            let date = &day.day[5..]; // strip year
+            println!("  {date}");
+            for w in &day.words {
+                println!("    {:<16} {}   {}x", w.word, w.translation, w.count);
+            }
+            println!();
+        }
+        return Ok(());
+    }
+
+    if review {
+        let entries = history::query_review()?;
+        if json {
+            println!("{}", serde_json::to_string_pretty(&entries)?);
+            return Ok(());
+        }
+        if entries.is_empty() {
+            println!("🔄 没有需要复习的词，继续保持！");
+            return Ok(());
+        }
+        println!("🔄 需要复习的词\n");
+        for e in &entries {
+            println!("  {:<16} {}   ({} 天前)", e.word, e.translation, e.days_ago);
+        }
         return Ok(());
     }
 
@@ -391,6 +470,10 @@ url = "http://localhost:11434"
 
 [display]
 theme = "auto"
+
+[search]
+searxng_url = "http://localhost:8888"
+max_results = 5
 "#;
 
 const DEFAULT_CONFIG_CLOUD: &str = r#"
@@ -420,6 +503,10 @@ url = "https://api.anthropic.com/v1"
 
 [display]
 theme = "auto"
+
+[search]
+searxng_url = "http://localhost:8888"
+max_results = 5
 "#;
 
 #[cfg(test)]

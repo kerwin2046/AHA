@@ -1,8 +1,8 @@
+use crate::config::OpenAIConfig;
+use crate::providers::AIProvider;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use std::time::Duration;
-use crate::config::OpenAIConfig;
-use crate::providers::AIProvider;
 
 /// API 请求超时，与 daemon 保持一致。
 const REQUEST_TIMEOUT_SECS: u64 = 60;

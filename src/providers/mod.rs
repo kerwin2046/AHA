@@ -7,9 +7,9 @@ pub trait AIProvider: Send + Sync {
     async fn complete(&self, prompt: &str) -> anyhow::Result<String>;
 }
 
+pub mod mock;
 pub mod ollama;
 pub mod openai;
-pub mod mock;
 
 /// Resolve a provider by name, falling back to config default or auto-detection.
 pub async fn resolve_provider(

@@ -1,4 +1,3 @@
-
 /// Print a user-friendly error message to stderr.
 pub fn print_error(err: &anyhow::Error) {
     eprintln!("{}", friendly_error(err));
@@ -29,9 +28,7 @@ fn friendly(msg: &str) -> String {
 
     // HTTP status errors
     if msg.contains("401") || msg.contains("unauthorized") || msg.contains("Unauthorized") {
-        return format!(
-            "🔑 API Key 无效或未设置\n   设置 TX_DEEPSEEK_KEY 或运行 ah init 配置"
-        );
+        return format!("🔑 API Key 无效或未设置\n   设置 TX_DEEPSEEK_KEY 或运行 ah init 配置");
     }
     if msg.contains("402") || msg.contains("insufficient") || msg.contains("quota") {
         return format!("💰 API 余额不足，请检查账户配额");

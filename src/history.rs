@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::Local;
+use chrono::{Local, TimeZone};
 use rusqlite::{params, Connection};
 use serde::Serialize;
 use std::path::PathBuf;
@@ -127,7 +127,8 @@ pub fn query_stats() -> Result<HistoryStats> {
     let conn = init()?;
 
     let total_queries: i64 = conn.query_row("SELECT COUNT(*) FROM queries", [], |r| r.get(0))?;
-    let unique_words: i64 = conn.query_row("SELECT COUNT(DISTINCT word) FROM queries", [], |r| r.get(0))?;
+    let unique_words: i64 =
+        conn.query_row("SELECT COUNT(DISTINCT word) FROM queries", [], |r| r.get(0))?;
 
     let mut stmt = conn.prepare(
         "SELECT word, COUNT(*) as cnt FROM queries GROUP BY word ORDER BY cnt DESC LIMIT 10",
@@ -164,6 +165,122 @@ pub fn query_stats() -> Result<HistoryStats> {
     })
 }
 
+/// Get this week's query activity, grouped by day.
+#[derive(Debug, Serialize)]
+pub struct WeeklyEntry {
+    pub day: String,
+    pub words: Vec<WeeklyWord>,
+    pub total: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WeeklyWord {
+    pub word: String,
+    pub count: i64,
+    pub translation: String,
+}
+
+pub fn query_weekly() -> Result<Vec<WeeklyEntry>> {
+    let conn = init()?;
+
+    // Get start of current week (Monday)
+    let mut stmt = conn.prepare(
+        "SELECT date(created_at) as day, word, translation, COUNT(*) as cnt
+         FROM queries
+         WHERE created_at >= date('now', '-7 days')
+         GROUP BY day, word
+         ORDER BY day DESC, cnt DESC",
+    )?;
+
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, i64>(3)?,
+        ))
+    })?;
+
+    let mut days: Vec<WeeklyEntry> = Vec::new();
+    for row in rows {
+        let (day, word, translation, count) = row?;
+        if let Some(last) = days.last_mut() {
+            if last.day == day {
+                last.words.push(WeeklyWord {
+                    word,
+                    count,
+                    translation,
+                });
+                last.total += count;
+                continue;
+            }
+        }
+        days.push(WeeklyEntry {
+            day,
+            words: vec![WeeklyWord {
+                word,
+                count,
+                translation,
+            }],
+            total: count,
+        });
+    }
+
+    Ok(days)
+}
+
+/// Get words that haven't been queried in 7+ days (for review).
+#[derive(Debug, Serialize)]
+pub struct ReviewEntry {
+    pub word: String,
+    pub translation: String,
+    pub last_seen: String,
+    pub days_ago: i64,
+}
+
+pub fn query_review() -> Result<Vec<ReviewEntry>> {
+    let conn = init()?;
+
+    let mut stmt = conn.prepare(
+        "SELECT word, translation, MAX(created_at) as last_seen
+         FROM queries
+         GROUP BY word, translation
+         HAVING last_seen < datetime('now', '-7 days')
+         ORDER BY last_seen ASC",
+    )?;
+
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+        ))
+    })?;
+
+    let now = chrono::Local::now();
+    let entries: Vec<ReviewEntry> = rows
+        .filter_map(|r| r.ok())
+        .map(|(word, translation, last_seen)| {
+            let days = if let Ok(parsed) =
+                chrono::NaiveDateTime::parse_from_str(&last_seen, "%Y-%m-%d %H:%M:%S")
+            {
+                let dt = chrono::Local.from_local_datetime(&parsed).unwrap();
+                (now - dt).num_days().max(0)
+            } else {
+                0
+            };
+            ReviewEntry {
+                word,
+                translation,
+                last_seen,
+                days_ago: days,
+            }
+        })
+        .collect();
+
+    Ok(entries)
+}
+
 /// Delete all history.
 pub fn clear_history() -> Result<usize> {
     let conn = init()?;
@@ -171,9 +288,7 @@ pub fn clear_history() -> Result<usize> {
     Ok(count)
 }
 
-fn row_to_entry(
-    row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<HistoryEntry> {
+fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryEntry> {
     Ok(HistoryEntry {
         id: row.get(0)?,
         word: row.get(1)?,

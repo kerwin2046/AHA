@@ -99,7 +99,9 @@ mod tests {
             to_lang: "中文".to_string(),
             ..Default::default()
         };
-        let result = explain::explain(&ctx, provider.as_ref(), false).await.unwrap();
+        let result = explain::explain(&ctx, provider.as_ref(), false, false)
+            .await
+            .unwrap();
         assert_eq!(result.translation, "函数");
         assert_eq!(result.explanation, "A reusable block of code");
         assert_eq!(result.usage, "fn foo() {}");
@@ -116,7 +118,9 @@ mod tests {
             to_lang: "中文".to_string(),
             ..Default::default()
         };
-        let result = explain::explain(&ctx, provider.as_ref(), false).await.unwrap();
+        let result = explain::explain(&ctx, provider.as_ref(), false, false)
+            .await
+            .unwrap();
 
         assert_eq!(result.translation, "异步");
         assert_eq!(result.explanation, "Allows non-blocking execution");
@@ -134,7 +138,9 @@ mod tests {
             to_lang: "中文".to_string(),
             ..Default::default()
         };
-        let result = explain::explain(&ctx, provider.as_ref(), false).await.unwrap();
+        let result = explain::explain(&ctx, provider.as_ref(), false, false)
+            .await
+            .unwrap();
 
         assert_eq!(result.translation, "变量");
         assert_eq!(result.explanation, "");

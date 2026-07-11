@@ -33,7 +33,6 @@ pub async fn run_daemon(config: &crate::config::Config) -> Result<()> {
     let mut pending: Option<(String, u64, Instant)> = None;
     let mut busy_pending: Option<(String, u64)> = None;
 
-
     loop {
         if *rx_stop.borrow() {
             println!("\ndaemon stopped.");
@@ -58,7 +57,13 @@ pub async fn run_daemon(config: &crate::config::Config) -> Result<()> {
             // Content that appeared during a busy API call: skip debounce.
             if let Some((busy_text, busy_hash)) = busy_pending.take() {
                 if hash == busy_hash && hash != last_hash {
-                    pending = Some((busy_text, busy_hash, Instant::now().checked_sub(Duration::from_millis(DEBOUNCE_MS)).unwrap()));
+                    pending = Some((
+                        busy_text,
+                        busy_hash,
+                        Instant::now()
+                            .checked_sub(Duration::from_millis(DEBOUNCE_MS))
+                            .unwrap(),
+                    ));
                 }
             }
 
@@ -72,12 +77,7 @@ pub async fn run_daemon(config: &crate::config::Config) -> Result<()> {
                         && crate::notify_guard::try_claim(&content)
                     {
                         last_hash = hash;
-                        process_clipboard(
-                            &content,
-                            provider.as_ref(),
-                            &provider_name_str,
-                        )
-                        .await;
+                        process_clipboard(&content, provider.as_ref(), &provider_name_str).await;
                     } else {
                         // Skip junk or duplicate, but don't re-trigger for same hash.
                         last_hash = hash;
@@ -118,9 +118,7 @@ async fn process_clipboard(
             show_notification("ah 出错了", &msg);
         }
         Err(_) => {
-            let msg = format!(
-                "AI 请求超时（{REQUEST_TIMEOUT_SECS}s），请检查网络或换个 provider"
-            );
+            let msg = format!("AI 请求超时（{REQUEST_TIMEOUT_SECS}s），请检查网络或换个 provider");
             eprintln!("  {msg}");
             show_notification("ah 请求超时", &msg);
         }
@@ -155,7 +153,8 @@ async fn process_clipboard_inner(
         ..Default::default()
     };
 
-    let r = crate::explain::explain(&ctx, provider, false).await?;
+    let diagnose = crate::filter::looks_like_error(word);
+    let r = crate::explain::explain(&ctx, provider, false, diagnose).await?;
     let _ = crate::history::save_query(
         word,
         provider_name,
@@ -209,11 +208,14 @@ pub(crate) fn show_notification(summary: &str, body: &str) {
     #[cfg(target_os = "macos")]
     {
         let _ = std::process::Command::new("osascript")
-            .args(["-e", &format!(
-                "display notification \"{}\" with title \"{}\"",
-                body.replace('"', "\\\""),
-                summary.replace('"', "\\\""),
-            )])
+            .args([
+                "-e",
+                &format!(
+                    "display notification \"{}\" with title \"{}\"",
+                    body.replace('"', "\\\""),
+                    summary.replace('"', "\\\""),
+                ),
+            ])
             .output();
     }
     #[cfg(not(target_os = "macos"))]

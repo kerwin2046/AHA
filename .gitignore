@@ -1,10 +1,29 @@
-/target
+# Rust
+/target/
 
-# macOS
+# macOS / editors
 .DS_Store
 *.swp
 *.swo
+*~
+.idea/
+.vscode/
 
-# Node / Raycast extension
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Node
+node_modules/
+*.tsbuildinfo
+
+# Frontend build output lives in assets/dashboard (committed for embed)
+frontend/dist/
+
+# Raycast extension
 raycast-ah/node_modules/
 raycast-ah/dist/

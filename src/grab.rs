@@ -22,6 +22,7 @@ pub async fn run_grab(config: &Config, source: &str, expand: bool, quiet: bool) 
     let provider_name = provider.name().to_string();
 
     let active_ctx = crate::context::detect_context();
+    let diagnose = crate::filter::looks_like_error(&word);
     let result = crate::explain::explain(
         &crate::explain::SourceContext {
             word: word.clone(),
@@ -32,6 +33,7 @@ pub async fn run_grab(config: &Config, source: &str, expand: bool, quiet: bool) 
         },
         provider.as_ref(),
         expand,
+        diagnose,
     )
     .await?;
 

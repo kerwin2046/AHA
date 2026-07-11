@@ -32,15 +32,56 @@ pub struct SourceContext {
     pub to_lang: String,
     /// Active app context (auto-detected), e.g. "Code", "Terminal"
     pub app_context: Option<String>,
+    /// Web search results from SearXNG
+    pub search_results: Vec<crate::search::SearchResult>,
 }
 
 /// Build the AI prompt.
-pub fn build_prompt(ctx: &SourceContext, expand: bool) -> String {
-    if expand {
+pub fn build_prompt(ctx: &SourceContext, expand: bool, diagnose: bool) -> String {
+    if diagnose {
+        build_error_prompt(ctx)
+    } else if expand {
         build_detailed_prompt(ctx)
     } else {
         build_short_prompt(ctx)
     }
+}
+
+fn build_error_prompt(ctx: &SourceContext) -> String {
+    let mut prompt = String::new();
+    prompt.push_str("You are a debugging assistant. The user encountered this error:\n\n");
+    prompt.push_str(&format!("```\n{}\n```\n\n", ctx.word));
+
+    if let Some(ref app) = ctx.app_context {
+        prompt.push_str(&format!("App: {app}\n"));
+    }
+    append_file_context(&mut prompt, ctx);
+
+    if !ctx.search_results.is_empty() {
+        prompt.push_str(&crate::search::format_search_results(&ctx.search_results));
+    }
+
+    prompt.push_str(
+        &format!(
+            r#"Analyze this error and respond in {target} in JSON:
+
+{{
+  "translation": "One-line summary of the error (what went wrong)",
+  "explanation": "Root cause analysis — why this error occurred, in detail",
+  "usage": "How to fix it — concrete steps or code example"
+}}
+
+Focus on:
+1. What the error means
+2. Why it happened (root cause)
+3. How to fix it (with code example if applicable)
+
+Be specific to the error shown, not generic advice. If this is not an actual error, say so in the explanation.
+"#,
+            target = ctx.to_lang
+        ),
+    );
+    prompt
 }
 
 fn append_file_context(prompt: &mut String, ctx: &SourceContext) {
@@ -73,9 +114,13 @@ fn build_short_prompt(ctx: &SourceContext) -> String {
     }
     append_file_context(&mut prompt, ctx);
 
-    prompt.push_str(
-        &format!(
-            r#"If it's a single word or short identifier (e.g. map, replicate, topk):
+    // Append web search results if available
+    if !ctx.search_results.is_empty() {
+        prompt.push_str(&crate::search::format_search_results(&ctx.search_results));
+    }
+
+    prompt.push_str(&format!(
+        r#"If it's a single word or short identifier (e.g. map, replicate, topk):
   - Translate to {target}
   - Briefly explain what it means in code
 
@@ -91,15 +136,16 @@ Respond in JSON:
   "usage": "example if applicable, else empty string"
 }}
 "#,
-            target = ctx.to_lang
-        ),
-    );
+        target = ctx.to_lang
+    ));
     prompt
 }
 
 fn build_detailed_prompt(ctx: &SourceContext) -> String {
     let mut prompt = String::new();
-    prompt.push_str("You are a code assistant. The user wants a detailed explanation of this code:\n\n");
+    prompt.push_str(
+        "You are a code assistant. The user wants a detailed explanation of this code:\n\n",
+    );
     prompt.push_str(&format!("```\n{}\n```\n\n", ctx.word));
 
     if let Some(ref app) = ctx.app_context {
@@ -107,9 +153,12 @@ fn build_detailed_prompt(ctx: &SourceContext) -> String {
     }
     append_file_context(&mut prompt, ctx);
 
-    prompt.push_str(
-        &format!(
-            r#"If it's a single word or short identifier:
+    if !ctx.search_results.is_empty() {
+        prompt.push_str(&crate::search::format_search_results(&ctx.search_results));
+    }
+
+    prompt.push_str(&format!(
+        r#"If it's a single word or short identifier:
   - Translate to {target}
   - Full name if abbreviation
   - Explain in context
@@ -127,9 +176,8 @@ Respond in JSON:
   "usage": "example if applicable, else empty string"
 }}
 "#,
-            target = ctx.to_lang
-        ),
-    );
+        target = ctx.to_lang
+    ));
     prompt
 }
 
@@ -207,10 +255,16 @@ pub async fn explain(
     ctx: &SourceContext,
     provider: &dyn crate::providers::AIProvider,
     expand: bool,
+    diagnose: bool,
 ) -> Result<ExplainResult> {
     let cache_key = format!(
-        "{}:{}:{}:{:?}:{:?}",
-        ctx.word, provider.name(), ctx.to_lang, ctx.file, ctx.line
+        "{}:{}:{}:{:?}:{:?}:diagnose={}",
+        ctx.word,
+        provider.name(),
+        ctx.to_lang,
+        ctx.file,
+        ctx.line,
+        diagnose
     );
 
     // Check cache
@@ -221,7 +275,7 @@ pub async fn explain(
         }
     }
 
-    let prompt = build_prompt(ctx, expand);
+    let prompt = build_prompt(ctx, expand, diagnose);
     let response = provider.complete(&prompt).await?;
     let result = parse_response(&response)?;
 

@@ -35,6 +35,14 @@ pub enum Command {
         #[arg(long)]
         expand: bool,
 
+        /// Diagnose an error message instead of explaining
+        #[arg(long)]
+        diagnose: bool,
+
+        /// Search the web for up-to-date information (requires SearXNG)
+        #[arg(long)]
+        search: bool,
+
         /// Output as JSON
         #[arg(long)]
         json: bool,
@@ -92,6 +100,14 @@ pub enum Command {
         /// Clear all history
         #[arg(long)]
         clear: bool,
+
+        /// Show this week's learning activity
+        #[arg(long)]
+        weekly: bool,
+
+        /// Show words that need review (not seen in 7+ days)
+        #[arg(long)]
+        review: bool,
 
         /// Output as JSON
         #[arg(long)]

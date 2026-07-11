@@ -29,6 +29,92 @@ fn is_standalone_url(text: &str) -> bool {
         && t.split_whitespace().count() == 1
 }
 
+/// Detect if text looks like a compiler error, stack trace, or runtime error.
+pub fn looks_like_error(text: &str) -> bool {
+    let lines: Vec<&str> = text
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
+    if lines.len() > 30 {
+        return false; // too long, probably regular code
+    }
+
+    let first = lines.first().map(|l| l.to_lowercase()).unwrap_or_default();
+
+    // Compiler error patterns: error[E0425], error: ..., error CS...
+    if first.starts_with("error[") || first.starts_with("error ") || first.starts_with("error:") {
+        return true;
+    }
+    if first.starts_with("fatal error") || first.starts_with("fatal:") {
+        return true;
+    }
+
+    // Rust panic
+    if first.contains("panicked") || first.contains("thread '") && first.contains("panicked") {
+        return true;
+    }
+
+    // Stack trace patterns
+    if lines
+        .iter()
+        .any(|l| l.trim().starts_with("at ") && l.contains(':'))
+    {
+        // at src/main.rs:42:5
+        return true;
+    }
+
+    // Python traceback
+    if first.starts_with("traceback") || first.contains("traceback (most recent call last)") {
+        return true;
+    }
+
+    // Java/C# exception
+    if lines.iter().any(|l| {
+        l.contains("Exception") && (l.ends_with(':') || l.ends_with(": ") || *l == l.trim())
+    }) || first.ends_with("Exception")
+        || first.ends_with("Error")
+    {
+        return true;
+    }
+
+    // Common error prefixes
+    let error_prefixes = [
+        "failed:",
+        "unable to",
+        "could not",
+        "cannot find",
+        "no such",
+        "is not",
+        "unresolved",
+        "undefined",
+        "expected ",
+        "unexpected",
+        "mismatched",
+        "missing ",
+        "duplicate",
+        "invalid",
+        "unknown ",
+    ];
+    if lines.len() <= 5 && error_prefixes.iter().any(|p| first.starts_with(p)) {
+        return true;
+    }
+
+    // File:line patterns common in tool output (e.g. grep, linter)
+    if lines.len() <= 8
+        && lines.iter().any(|l| {
+            // src/main.rs:42 or src/main.rs:42:5
+            l.chars().filter(|&c| c == ':').count() >= 2 && l.contains('/')
+        })
+        && !text.contains("fn ")
+        && !text.contains("impl ")
+    {
+        return true;
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -68,6 +154,46 @@ mod tests {
     fn rejects_pure_digits() {
         assert!(!should_process("42"));
         assert!(!should_process("12345"));
+    }
+
+    #[test]
+    fn detects_rust_compiler_error() {
+        let err = "error[E0425]: cannot find value `x` in this scope\n --> src/main.rs:10:5";
+        assert!(looks_like_error(err));
+    }
+
+    #[test]
+    fn detects_rust_panic() {
+        let err = "thread 'main' panicked at 'index out of bounds', src/main.rs:10";
+        assert!(looks_like_error(err));
+    }
+
+    #[test]
+    fn detects_python_traceback() {
+        let err = "Traceback (most recent call last):\n  File \"test.py\", line 5, in <module>\n    foo()";
+        assert!(looks_like_error(err));
+    }
+
+    #[test]
+    fn detects_type_error() {
+        let err = "TypeError: 'int' object is not iterable";
+        assert!(looks_like_error(err));
+    }
+
+    #[test]
+    fn rejects_normal_code() {
+        assert!(!looks_like_error("fn map<T>(x: T) -> T { x }"));
+        assert!(!looks_like_error("let x = 42;"));
+        assert!(!looks_like_error("pub struct Config { name: String }"));
+    }
+
+    #[test]
+    fn rejects_long_text() {
+        let long = (0..50)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!looks_like_error(&long));
     }
 
     #[test]

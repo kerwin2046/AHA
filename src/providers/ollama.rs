@@ -1,8 +1,8 @@
+use crate::config::OllamaConfig;
+use crate::providers::AIProvider;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::time::Duration;
-use crate::config::OllamaConfig;
-use crate::providers::AIProvider;
 
 /// API 请求超时。
 const REQUEST_TIMEOUT_SECS: u64 = 60;
@@ -57,9 +57,6 @@ impl AIProvider for OllamaProvider {
             .await?;
 
         let data: serde_json::Value = resp.json().await?;
-        Ok(data["response"]
-            .as_str()
-            .unwrap_or("")
-            .to_string())
+        Ok(data["response"].as_str().unwrap_or("").to_string())
     }
 }
