@@ -27,26 +27,34 @@ pub async fn search_searxng(
     query: &str,
     max_results: usize,
 ) -> Result<Vec<SearchResult>> {
+    let base = url.trim_end_matches('/');
+    let endpoint = format!("{base}/search");
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
-        .build()?;
+        .build()
+        .map_err(|e| anyhow::anyhow!("HTTP client error: {e}"))?;
 
     let resp = client
-        .get(format!("{}/search", url.trim_end_matches('/')))
+        .get(&endpoint)
         .header("X-Forwarded-For", "127.0.0.1")
         .query(&[
             ("q", query),
-            ("format", "json".into()),
-            ("language", "en".into()),
+            ("format", "json"),
+            ("language", "en"),
         ])
         .send()
-        .await?;
+        .await
+        .map_err(|e| anyhow::anyhow!("SearXNG request failed ({endpoint}): {e}"))?;
 
     if !resp.status().is_success() {
         anyhow::bail!("SearXNG returned HTTP {}", resp.status());
     }
 
-    let data: SearxngResponse = resp.json().await?;
+    let data: SearxngResponse = resp
+        .json()
+        .await
+        .map_err(|e| anyhow::anyhow!("SearXNG JSON parse error: {e}"))?;
 
     let results: Vec<SearchResult> = data
         .results

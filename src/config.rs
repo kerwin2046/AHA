@@ -56,7 +56,7 @@ pub struct CaptureConfig {
     pub context_lines: usize,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct SearchConfig {
     /// SearXNG instance URL, e.g. http://localhost:8888
@@ -65,6 +65,15 @@ pub struct SearchConfig {
     /// Max results to fetch per query
     #[serde(default = "default_search_results")]
     pub max_results: usize,
+}
+
+impl Default for SearchConfig {
+    fn default() -> Self {
+        Self {
+            searxng_url: default_searxng_url(),
+            max_results: default_search_results(),
+        }
+    }
 }
 
 fn default_searxng_url() -> String {
