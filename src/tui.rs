@@ -518,6 +518,30 @@ impl App {
             }
         }
 
+        if !entry.sources.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                " Sources",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            )));
+            lines.push(Line::from(""));
+            for (i, s) in entry.sources.iter().enumerate() {
+                lines.push(Line::from(format!("  {}. {}", i + 1, s.title)));
+                if !s.snippet.is_empty() {
+                    lines.push(Line::from(Span::styled(
+                        format!("     {}", s.snippet),
+                        Style::default().fg(Color::DarkGray),
+                    )));
+                }
+                lines.push(Line::from(Span::styled(
+                    format!("     {}", s.url),
+                    Style::default().fg(Color::DarkGray),
+                )));
+            }
+        }
+
         let paragraph = Paragraph::new(lines)
             .scroll((self.scroll as u16, 0))
             .block(Block::default().borders(Borders::ALL).title(" Detail "));

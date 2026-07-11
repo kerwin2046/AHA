@@ -123,9 +123,10 @@ async fn cmd_explain(
         &result.usage,
         ctx.file.as_deref(),
         ctx.language.as_deref(),
+        &ctx.search_results,
     );
 
-    render::render_explain(&result, &format);
+    render::render_explain(&result, &format, &ctx.search_results);
 
     Ok(())
 }
@@ -296,8 +297,9 @@ async fn cmd_ask(config: &Config) -> Result<()> {
                     &result.usage,
                     None,
                     None,
+                    &[],
                 );
-                render::render_explain(&result, "plain");
+                render::render_explain(&result, "plain", &[]);
             }
             Err(e) => crate::error::print_error(&e),
         }

@@ -8,6 +8,12 @@ type Stats = {
   top_day: [string, number] | null;
 };
 
+type SourceHit = {
+  title: string;
+  url: string;
+  snippet: string;
+};
+
 type HistoryEntry = {
   id: number;
   word: string;
@@ -18,6 +24,7 @@ type HistoryEntry = {
   context_file: string | null;
   context_language: string | null;
   created_at: string;
+  sources?: SourceHit[];
 };
 
 type WeeklyEntry = {
@@ -33,12 +40,6 @@ type ReviewEntry = {
   days_ago: number;
 };
 
-type WebHit = {
-  title: string;
-  url: string;
-  snippet: string;
-};
-
 function api(path: string) {
   return fetch(path).then((r) => r.json());
 }
@@ -46,9 +47,8 @@ function api(path: string) {
 const NAV = [
   { key: "today", label: "今日" },
   { key: "weekly", label: "本周" },
-  { key: "review", label: "复习" },
+  { key: "review", label: "足迹" },
   { key: "history", label: "历史" },
-  { key: "web", label: "搜索" },
 ] as const;
 
 type Tab = (typeof NAV)[number]["key"];
@@ -138,7 +138,6 @@ export default function App() {
             onQuery={setHistoryQ}
           />
         )}
-        {tab === "web" && <WebSearchView />}
       </main>
     </div>
   );
@@ -213,13 +212,13 @@ function ReviewView({ entries }: { entries: ReviewEntry[] }) {
     <section>
       <header class="page-head">
         <div>
-          <h1 class="page-title">复习</h1>
-          <p class="page-sub">久未见面的词</p>
+          <h1 class="page-title">足迹</h1>
+          <p class="page-sub">久未再见的「啊？」时刻</p>
         </div>
         <span class="page-meta">{entries.length} 个</span>
       </header>
       {!entries.length ? (
-        <p class="empty">暂时没有需要复习的词</p>
+        <p class="empty">暂时没有久未见面的词</p>
       ) : (
         <div class="review-list">
           {entries.map((e) => (
@@ -275,99 +274,6 @@ function HistoryView({
   );
 }
 
-function WebSearchView() {
-  const [q, setQ] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<WebHit[]>([]);
-  const [lastQuery, setLastQuery] = useState("");
-
-  useEffect(() => {
-    const query = q.trim();
-    if (!query) {
-      setResults([]);
-      setError(null);
-      setLastQuery("");
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const t = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(query)}&limit=10`)
-        .then(async (r) => {
-          const data = await r.json();
-          if (!r.ok || data.error) {
-            throw new Error(data.error || `HTTP ${r.status}`);
-          }
-          setResults(data.results || []);
-          setLastQuery(data.query || query);
-          setError(null);
-        })
-        .catch((e: Error) => {
-          setResults([]);
-          setError(e.message || "搜索失败");
-        })
-        .finally(() => setLoading(false));
-    }, 350);
-
-    return () => clearTimeout(t);
-  }, [q]);
-
-  return (
-    <section>
-      <header class="page-head">
-        <div>
-          <h1 class="page-title">搜索</h1>
-          <p class="page-sub">经 SearXNG 检索网页</p>
-        </div>
-        <span class="page-meta">
-          {loading ? "搜索中" : results.length ? `${results.length} 条` : ""}
-        </span>
-      </header>
-      <input
-        class="search-box"
-        type="search"
-        placeholder="输入关键词，实时显示结果…"
-        value={q}
-        onInput={(e) => setQ((e.target as HTMLInputElement).value)}
-        autoFocus
-      />
-      {loading && <p class="empty">搜索中…</p>}
-      {!loading && error && (
-        <p class="empty">
-          <strong>{error}</strong>
-          <br />
-          确认 SearXNG 已启动，且 searxng_url 配置正确
-        </p>
-      )}
-      {!loading && !error && !q.trim() && (
-        <p class="empty">开始输入后，结果会出现在下方</p>
-      )}
-      {!loading && !error && q.trim() && !results.length && (
-        <p class="empty">没有找到「{lastQuery || q}」</p>
-      )}
-      {!loading && results.length > 0 && (
-        <div class="web-list">
-          {results.map((r) => (
-            <a
-              key={r.url}
-              class="web-card"
-              href={r.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <div class="web-title">{r.title}</div>
-              <div class="web-url">{r.url}</div>
-              <div class="web-snippet">{r.snippet}</div>
-            </a>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function Feed({ entries }: { entries: HistoryEntry[] }) {
   const [expanded, setExpanded] = useState<number | null>(null);
 
@@ -375,6 +281,7 @@ function Feed({ entries }: { entries: HistoryEntry[] }) {
     <div class="feed">
       {entries.map((e) => {
         const open = expanded === e.id;
+        const sources = e.sources || [];
         return (
           <div key={e.id} class="feed-item">
             <button
@@ -384,7 +291,10 @@ function Feed({ entries }: { entries: HistoryEntry[] }) {
             >
               <span class="feed-word">{e.word}</span>
               <span class="feed-trans">{e.translation}</span>
-              <span class="feed-provider">{e.provider}</span>
+              <span class="feed-provider">
+                {e.provider}
+                {sources.length > 0 ? ` · ${sources.length} 源` : ""}
+              </span>
               <span class="feed-time">{e.created_at.slice(5, 16)}</span>
             </button>
             {open && (
@@ -407,6 +317,28 @@ function Feed({ entries }: { entries: HistoryEntry[] }) {
                     <div class="feed-detail-text">
                       {e.context_file}
                       {e.context_language ? ` · ${e.context_language}` : ""}
+                    </div>
+                  </div>
+                )}
+                {sources.length > 0 && (
+                  <div class="feed-detail-block">
+                    <div class="feed-detail-label">来源</div>
+                    <div class="web-list">
+                      {sources.map((s) => (
+                        <a
+                          key={s.url}
+                          class="web-card"
+                          href={s.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <div class="web-title">{s.title}</div>
+                          <div class="web-url">{s.url}</div>
+                          {s.snippet && (
+                            <div class="web-snippet">{s.snippet}</div>
+                          )}
+                        </a>
+                      ))}
                     </div>
                   </div>
                 )}

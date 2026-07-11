@@ -2,24 +2,32 @@ use colored::*;
 use textwrap::Options;
 
 use crate::explain::ExplainResult;
+use crate::search::SearchResult;
 
 /// Render the explain result to stdout in the requested format.
-pub fn render_explain(result: &ExplainResult, format: &str) {
+pub fn render_explain(result: &ExplainResult, format: &str, sources: &[SearchResult]) {
     match format {
-        "json" => render_json(result),
-        "markdown" => render_markdown(result),
-        "html" => render_html(result),
-        _ => render_terminal(result),
+        "json" => render_json(result, sources),
+        "markdown" => render_markdown(result, sources),
+        "html" => render_html(result, sources),
+        _ => render_terminal(result, sources),
     }
 }
 
-fn render_json(result: &ExplainResult) {
-    if let Ok(json) = serde_json::to_string_pretty(result) {
+fn render_json(result: &ExplainResult, sources: &[SearchResult]) {
+    let payload = serde_json::json!({
+        "translation": result.translation,
+        "explanation": result.explanation,
+        "usage": result.usage,
+        "full_name": result.full_name,
+        "sources": sources,
+    });
+    if let Ok(json) = serde_json::to_string_pretty(&payload) {
         println!("{json}");
     }
 }
 
-fn render_markdown(result: &ExplainResult) {
+fn render_markdown(result: &ExplainResult, sources: &[SearchResult]) {
     println!("## 翻译 (Translation)\n");
     if !result.translation.is_empty() {
         println!("{}", result.translation);
@@ -43,9 +51,20 @@ fn render_markdown(result: &ExplainResult) {
         println!("```");
         println!();
     }
+
+    if !sources.is_empty() {
+        println!("## 来源 (Sources)\n");
+        for (i, s) in sources.iter().enumerate() {
+            println!("{}. [{}]({})", i + 1, s.title, s.url);
+            if !s.snippet.is_empty() {
+                println!("   {}", s.snippet);
+            }
+            println!();
+        }
+    }
 }
 
-fn render_html(result: &ExplainResult) {
+fn render_html(result: &ExplainResult, sources: &[SearchResult]) {
     println!("<!DOCTYPE html>");
     println!("<html><head><meta charset=\"utf-8\">");
     println!("<style>");
@@ -55,6 +74,8 @@ fn render_html(result: &ExplainResult) {
     println!(".explanation {{ color: #2aa198; }}");
     println!(".usage {{ background: #f8f8f8; padding: 1em; border-radius: 4px; font-family: monospace; }}");
     println!(".meta {{ color: #999; font-size: 0.9em; }}");
+    println!(".source {{ margin-bottom: 0.8em; }}");
+    println!(".source a {{ color: #268bd2; }}");
     println!("</style></head><body>");
     println!("<h1>ah explain</h1>");
 
@@ -86,6 +107,22 @@ fn render_html(result: &ExplainResult) {
         println!("<pre class=\"usage\">{}</pre>", escape_html(&result.usage));
     }
 
+    if !sources.is_empty() {
+        println!("<h2>来源</h2>");
+        for s in sources {
+            println!("<div class=\"source\">");
+            println!(
+                "<a href=\"{}\" target=\"_blank\" rel=\"noreferrer\">{}</a>",
+                escape_html(&s.url),
+                escape_html(&s.title)
+            );
+            if !s.snippet.is_empty() {
+                println!("<div class=\"meta\">{}</div>", escape_html(&s.snippet));
+            }
+            println!("</div>");
+        }
+    }
+
     println!("</body></html>");
 }
 
@@ -96,7 +133,7 @@ fn escape_html(s: &str) -> String {
         .replace('"', "&quot;")
 }
 
-fn render_terminal(result: &ExplainResult) {
+fn render_terminal(result: &ExplainResult, sources: &[SearchResult]) {
     let term_width = terminal_width();
     let opts = Options::new(term_width).break_words(true);
 
@@ -126,6 +163,22 @@ fn render_terminal(result: &ExplainResult) {
         print!("{} ", "用法:".green().bold());
         for line in result.usage.lines() {
             println!("  {}", line.green());
+        }
+        println!();
+    }
+
+    if !sources.is_empty() {
+        print!("{} ", "来源:".magenta().bold());
+        println!();
+        for (i, s) in sources.iter().enumerate() {
+            println!("  {}. {}", i + 1, s.title.cyan());
+            if !s.snippet.is_empty() {
+                let wrapped = textwrap::fill(&s.snippet, opts.width.saturating_sub(5));
+                for line in wrapped.lines() {
+                    println!("     {}", line.dimmed());
+                }
+            }
+            println!("     {}", s.url.dimmed());
         }
         println!();
     }

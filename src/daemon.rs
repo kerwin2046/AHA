@@ -163,6 +163,7 @@ async fn process_clipboard_inner(
         &r.usage,
         None,
         None,
+        &[],
     );
     let summary = if !r.translation.is_empty() {
         format!("{} — {}", short_title(word), r.translation)

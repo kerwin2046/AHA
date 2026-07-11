@@ -18,12 +18,6 @@ struct HistoryQuery {
     search: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct WebSearchQuery {
-    q: Option<String>,
-    limit: Option<usize>,
-}
-
 /// Preact dashboard built by `cd frontend && npm run build`.
 #[derive(Embed)]
 #[folder = "assets/dashboard/"]
@@ -38,7 +32,6 @@ pub async fn serve(port: u16) -> Result<()> {
         .route("/api/today", get(api_today))
         .route("/api/weekly", get(api_weekly))
         .route("/api/review", get(api_review))
-        .route("/api/search", get(api_search))
         .fallback(static_handler)
         .with_state(state);
 
@@ -159,41 +152,6 @@ async fn api_review(State(_): State<Arc<AppState>>) -> impl IntoResponse {
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
-        )
-            .into_response(),
-    }
-}
-
-async fn api_search(Query(q): Query<WebSearchQuery>) -> impl IntoResponse {
-    let query = q.q.unwrap_or_default();
-    let query = query.trim();
-    if query.is_empty() {
-        return Json(serde_json::json!({
-            "query": "",
-            "results": [],
-        }))
-        .into_response();
-    }
-
-    let config = crate::config::Config::load();
-    let limit = q
-        .limit
-        .unwrap_or(config.search.max_results)
-        .clamp(1, 20);
-
-    match crate::search::search_searxng(&config.search.searxng_url, query, limit).await {
-        Ok(results) => Json(serde_json::json!({
-            "query": query,
-            "results": results,
-        }))
-        .into_response(),
-        Err(e) => (
-            axum::http::StatusCode::BAD_GATEWAY,
-            Json(serde_json::json!({
-                "query": query,
-                "error": e.to_string(),
-                "results": [],
-            })),
         )
             .into_response(),
     }

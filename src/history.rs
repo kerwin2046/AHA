@@ -4,6 +4,8 @@ use rusqlite::{params, Connection};
 use serde::Serialize;
 use std::path::PathBuf;
 
+use crate::search::SearchResult;
+
 #[derive(Debug, Serialize)]
 pub struct HistoryEntry {
     pub id: i64,
@@ -15,6 +17,8 @@ pub struct HistoryEntry {
     pub context_file: Option<String>,
     pub context_language: Option<String>,
     pub created_at: String,
+    #[serde(default)]
+    pub sources: Vec<SearchResult>,
 }
 
 /// Path to the history SQLite database.
@@ -44,13 +48,47 @@ pub fn init() -> Result<Connection> {
             usage_example TEXT NOT NULL DEFAULT '',
             context_file   TEXT,
             context_language TEXT,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            sources_json TEXT NOT NULL DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS idx_queries_word ON queries(word);
         CREATE INDEX IF NOT EXISTS idx_queries_created ON queries(created_at DESC);",
     )?;
 
+    ensure_sources_column(&conn)?;
+
     Ok(conn)
+}
+
+fn ensure_sources_column(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(queries)")?;
+    let cols: Vec<String> = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(|c| c.ok())
+        .collect();
+    if !cols.iter().any(|c| c == "sources_json") {
+        conn.execute(
+            "ALTER TABLE queries ADD COLUMN sources_json TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
+fn sources_to_json(sources: &[SearchResult]) -> String {
+    if sources.is_empty() {
+        String::new()
+    } else {
+        serde_json::to_string(sources).unwrap_or_default()
+    }
+}
+
+fn sources_from_json(raw: String) -> Vec<SearchResult> {
+    if raw.trim().is_empty() {
+        Vec::new()
+    } else {
+        serde_json::from_str(&raw).unwrap_or_default()
+    }
 }
 
 /// Save a query result to history.
@@ -62,13 +100,15 @@ pub fn save_query(
     usage_example: &str,
     context_file: Option<&str>,
     context_language: Option<&str>,
+    sources: &[SearchResult],
 ) -> Result<i64> {
     let conn = init()?;
     let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let sources_json = sources_to_json(sources);
 
     conn.execute(
-        "INSERT INTO queries (word, provider, translation, explanation, usage_example, context_file, context_language, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO queries (word, provider, translation, explanation, usage_example, context_file, context_language, created_at, sources_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             word,
             provider,
@@ -78,6 +118,7 @@ pub fn save_query(
             context_file,
             context_language,
             now,
+            sources_json,
         ],
     )?;
 
@@ -91,7 +132,7 @@ pub fn list_queries(limit: usize, search: Option<&str>) -> Result<Vec<HistoryEnt
     if let Some(q) = search {
         let like = format!("%{}%", q);
         let mut stmt = conn.prepare(
-            "SELECT id, word, provider, translation, explanation, usage_example, context_file, context_language, created_at
+            "SELECT id, word, provider, translation, explanation, usage_example, context_file, context_language, created_at, sources_json
              FROM queries
              WHERE word LIKE ?1 OR translation LIKE ?1 OR explanation LIKE ?1
              ORDER BY created_at DESC
@@ -103,7 +144,7 @@ pub fn list_queries(limit: usize, search: Option<&str>) -> Result<Vec<HistoryEnt
     }
 
     let mut stmt = conn.prepare(
-        "SELECT id, word, provider, translation, explanation, usage_example, context_file, context_language, created_at
+        "SELECT id, word, provider, translation, explanation, usage_example, context_file, context_language, created_at, sources_json
          FROM queries
          ORDER BY created_at DESC
          LIMIT ?1",
@@ -299,6 +340,7 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryEntry> {
         context_file: row.get(6)?,
         context_language: row.get(7)?,
         created_at: row.get(8)?,
+        sources: sources_from_json(row.get::<_, String>(9).unwrap_or_default()),
     })
 }
 
@@ -319,7 +361,8 @@ mod tests {
                 usage_example TEXT NOT NULL DEFAULT '',
                 context_file   TEXT,
                 context_language TEXT,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                sources_json TEXT NOT NULL DEFAULT ''
             );",
         )?;
         Ok(conn)
@@ -332,9 +375,9 @@ mod tests {
         let now = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
         conn.execute(
-            "INSERT INTO queries (word, provider, translation, explanation, usage_example, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params!["map", "ollama", "映射", "Array method", "[1,2].map(fn)", &now],
+            "INSERT INTO queries (word, provider, translation, explanation, usage_example, created_at, sources_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params!["map", "ollama", "映射", "Array method", "[1,2].map(fn)", &now, ""],
         )?;
         conn.execute(
             "INSERT INTO queries (word, provider, created_at)
@@ -343,7 +386,7 @@ mod tests {
         )?;
 
         let mut stmt = conn.prepare(
-            "SELECT id, word, provider, translation, explanation, usage_example, context_file, context_language, created_at
+            "SELECT id, word, provider, translation, explanation, usage_example, context_file, context_language, created_at, sources_json
              FROM queries ORDER BY id",
         )?;
         let entries: Vec<HistoryEntry> = stmt

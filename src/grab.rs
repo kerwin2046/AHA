@@ -23,12 +23,23 @@ pub async fn run_grab(config: &Config, source: &str, expand: bool, quiet: bool) 
 
     let active_ctx = crate::context::detect_context();
     let diagnose = crate::filter::looks_like_error(&word);
+
+    let mut search_results = Vec::new();
+    if diagnose {
+        let url = &config.search.searxng_url;
+        let max = config.search.max_results;
+        if let Ok(results) = crate::search::search_searxng(url, &word, max).await {
+            search_results = results;
+        }
+    }
+
     let result = crate::explain::explain(
         &crate::explain::SourceContext {
             word: word.clone(),
             to_lang: "中文".to_string(),
             language: active_ctx.language.clone(),
             app_context: active_ctx.app_name.clone(),
+            search_results: search_results.clone(),
             ..Default::default()
         },
         provider.as_ref(),
@@ -45,6 +56,7 @@ pub async fn run_grab(config: &Config, source: &str, expand: bool, quiet: bool) 
         &result.usage,
         None,
         None,
+        &search_results,
     );
 
     // Desktop notification is the primary output for hotkey use.
@@ -64,7 +76,7 @@ pub async fn run_grab(config: &Config, source: &str, expand: bool, quiet: bool) 
 
     // Also print when run from an interactive terminal.
     if !quiet {
-        crate::render::render_explain(&result, "plain");
+        crate::render::render_explain(&result, "plain", &search_results);
     }
 
     Ok(())
