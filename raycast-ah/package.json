@@ -1,0 +1,70 @@
+{
+  "name": "ah",
+  "title": "ah",
+  "description": "Instant AI explanation for selected text — translate terms, explain code, understand APIs",
+  "icon": "icon.png",
+  "author": "ah",
+  "categories": ["Developer Tools", "Documentation"],
+  "license": "MIT",
+  "preferences": [
+    {
+      "name": "ahPath",
+      "type": "textfield",
+      "title": "ah Binary Path",
+      "placeholder": "/usr/local/bin/ah",
+      "description": "Path to ah binary (leave empty for auto-detect)",
+      "required": false
+    },
+    {
+      "name": "deepseekKey",
+      "type": "password",
+      "title": "DeepSeek API Key",
+      "placeholder": "sk-...",
+      "description": "TX_DEEPSEEK_KEY",
+      "required": false
+    },
+    {
+      "name": "openaiKey",
+      "type": "password",
+      "title": "OpenAI API Key",
+      "placeholder": "sk-...",
+      "description": "TX_OPENAI_KEY",
+      "required": false
+    }
+  ],
+  "commands": [
+    {
+      "name": "explain-selected",
+      "title": "Explain Selected Text",
+      "subtitle": "ah",
+      "description": "Translate and explain the currently selected text",
+      "mode": "view"
+    },
+    {
+      "name": "explain-input",
+      "title": "Explain Input",
+      "subtitle": "ah",
+      "description": "Type a word or code to explain",
+      "arguments": [
+        {
+          "name": "query",
+          "placeholder": "map, useEffect, ...",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "mode": "view"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.77.0",
+    "@raycast/utils": "^1.16.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  },
+  "scripts": {
+    "build": "ray build -e dist -o dist",
+    "dev": "ray develop"
+  }
+}

@@ -1,1 +1,10 @@
 /target
+
+# macOS
+.DS_Store
+*.swp
+*.swo
+
+# Node / Raycast extension
+raycast-ah/node_modules/
+raycast-ah/dist/
