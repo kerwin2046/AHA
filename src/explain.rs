@@ -67,7 +67,7 @@ fn build_error_prompt(ctx: &SourceContext) -> String {
 
 {{
   "translation": "One-line summary of the error (what went wrong)",
-  "explanation": "Root cause analysis — why this error occurred, in detail",
+  "explanation": "Root cause analysis — why this error occurred. When using web results, cite them inline as [1], [2], etc.",
   "usage": "How to fix it — concrete steps or code example"
 }}
 
@@ -76,7 +76,7 @@ Focus on:
 2. Why it happened (root cause)
 3. How to fix it (with code example if applicable)
 
-Be specific to the error shown, not generic advice. If this is not an actual error, say so in the explanation.
+Be specific to the error shown, not generic advice. Prefer citing the web search results above with [n] when they support your claims. If this is not an actual error, say so in the explanation.
 "#,
             target = ctx.to_lang
         ),
@@ -132,7 +132,7 @@ If it's a code snippet (function, struct, trait, expression, etc.):
 Respond in JSON:
 {{
   "translation": "if single word: translation, else: what this code does (1 short phrase)",
-  "explanation": "meaning/purpose in {target}",
+  "explanation": "meaning/purpose in {target}. If web results are present, cite them as [1], [2] where relevant.",
   "usage": "example if applicable, else empty string"
 }}
 "#,
@@ -171,7 +171,7 @@ If it's a code snippet:
 Respond in JSON:
 {{
   "translation": "if word: translation, if code: one-line summary",
-  "explanation": "detailed explanation in {target} (3-5 sentences)",
+  "explanation": "detailed explanation in {target} (3-5 sentences). Cite web results as [1], [2] when used.",
   "full_name": "full name if abbreviation, else empty string",
   "usage": "example if applicable, else empty string"
 }}

@@ -28,7 +28,9 @@ pub async fn run_grab(config: &Config, source: &str, expand: bool, quiet: bool) 
     if diagnose {
         let url = &config.search.searxng_url;
         let max = config.search.max_results;
-        if let Ok(results) = crate::search::search_searxng(url, &word, max).await {
+        let search_q =
+            crate::search::build_search_query(&word, active_ctx.language.as_deref());
+        if let Ok(results) = crate::search::search_searxng(url, &search_q, max).await {
             search_results = results;
         }
     }

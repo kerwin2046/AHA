@@ -528,7 +528,7 @@ impl App {
             )));
             lines.push(Line::from(""));
             for (i, s) in entry.sources.iter().enumerate() {
-                lines.push(Line::from(format!("  {}. {}", i + 1, s.title)));
+                lines.push(Line::from(format!("  [{}] {}", i + 1, s.title)));
                 if !s.snippet.is_empty() {
                     lines.push(Line::from(Span::styled(
                         format!("     {}", s.snippet),

@@ -80,7 +80,7 @@ fn default_searxng_url() -> String {
     "http://localhost:8888".to_string()
 }
 fn default_search_results() -> usize {
-    5
+    3
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

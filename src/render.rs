@@ -171,7 +171,7 @@ fn render_terminal(result: &ExplainResult, sources: &[SearchResult]) {
         print!("{} ", "来源:".magenta().bold());
         println!();
         for (i, s) in sources.iter().enumerate() {
-            println!("  {}. {}", i + 1, s.title.cyan());
+            println!("  [{}] {}", i + 1, s.title.cyan());
             if !s.snippet.is_empty() {
                 let wrapped = textwrap::fill(&s.snippet, opts.width.saturating_sub(5));
                 for line in wrapped.lines() {

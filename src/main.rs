@@ -98,7 +98,10 @@ async fn cmd_explain(
         let url = &config.search.searxng_url;
         let max = config.search.max_results;
         println!("🔍 Searching the web...");
-        match crate::search::search_searxng(url, &ctx.word, max).await {
+        let search_q =
+            crate::search::build_search_query(&ctx.word, ctx.language.as_deref());
+        println!("   query: {search_q}");
+        match crate::search::search_searxng(url, &search_q, max).await {
             Ok(results) => {
                 println!("   Found {} results", results.len());
                 ctx.search_results = results;

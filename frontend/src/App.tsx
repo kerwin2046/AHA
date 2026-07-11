@@ -324,7 +324,7 @@ function Feed({ entries }: { entries: HistoryEntry[] }) {
                   <div class="feed-detail-block">
                     <div class="feed-detail-label">来源</div>
                     <div class="web-list">
-                      {sources.map((s) => (
+                      {sources.map((s, i) => (
                         <a
                           key={s.url}
                           class="web-card"
@@ -332,7 +332,9 @@ function Feed({ entries }: { entries: HistoryEntry[] }) {
                           target="_blank"
                           rel="noreferrer"
                         >
-                          <div class="web-title">{s.title}</div>
+                          <div class="web-title">
+                            [{i + 1}] {s.title}
+                          </div>
                           <div class="web-url">{s.url}</div>
                           {s.snippet && (
                             <div class="web-snippet">{s.snippet}</div>
