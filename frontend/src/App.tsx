@@ -1,5 +1,4 @@
 import { useEffect, useState } from "preact/hooks";
-import type { JSX } from "preact";
 
 type Stats = {
   total_queries: number;
@@ -34,16 +33,22 @@ type ReviewEntry = {
   days_ago: number;
 };
 
+type WebHit = {
+  title: string;
+  url: string;
+  snippet: string;
+};
+
 function api(path: string) {
-  // Same-origin when served by `ah web`; Vite proxies /api in dev.
   return fetch(path).then((r) => r.json());
 }
 
 const NAV = [
-  { key: "today", label: "今日", icon: "◉" },
-  { key: "weekly", label: "本周", icon: "○" },
-  { key: "review", label: "复习", icon: "◎" },
-  { key: "history", label: "历史", icon: "⊞" },
+  { key: "today", label: "今日" },
+  { key: "weekly", label: "本周" },
+  { key: "review", label: "复习" },
+  { key: "history", label: "历史" },
+  { key: "web", label: "搜索" },
 ] as const;
 
 type Tab = (typeof NAV)[number]["key"];
@@ -55,7 +60,7 @@ export default function App() {
   const [weekly, setWeekly] = useState<WeeklyEntry[]>([]);
   const [review, setReview] = useState<ReviewEntry[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [search, setSearch] = useState("");
+  const [historyQ, setHistoryQ] = useState("");
 
   useEffect(() => {
     api("/api/stats").then(setStats);
@@ -67,436 +72,349 @@ export default function App() {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      const url = search
-        ? `/api/history?limit=200&search=${encodeURIComponent(search)}`
+      const url = historyQ
+        ? `/api/history?limit=200&search=${encodeURIComponent(historyQ)}`
         : "/api/history?limit=200";
       api(url).then(setHistory);
     }, 300);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [historyQ]);
+
+  const counts: Partial<Record<Tab, number>> = {
+    today: today.length,
+    review: review.length,
+    history: history.length,
+  };
 
   return (
-    <div style={s.layout}>
-      {/* LEFT SIDEBAR */}
-      <aside style={s.sidebar}>
-        <div style={s.logo}>
-          <span style={s.logoAccent}>ah</span>
-          <span style={s.logoDim}>/dashboard</span>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-name">ah</span>
+          <span class="brand-tag">Stay in flow.</span>
         </div>
 
-        <nav style={s.nav}>
+        <nav class="nav">
           {NAV.map((n) => (
             <button
               key={n.key}
+              class={`nav-item${tab === n.key ? " active" : ""}`}
               onClick={() => setTab(n.key)}
-              style={{
-                ...s.navItem,
-                ...(tab === n.key ? s.navItemActive : {}),
-              }}
             >
-              <span style={s.navIcon}>{n.icon}</span>
-              {n.label}
+              <span class="nav-label">{n.label}</span>
+              {counts[n.key] != null && (
+                <span class="nav-count">{counts[n.key]}</span>
+              )}
             </button>
           ))}
         </nav>
 
         {stats && (
-          <div style={s.sideStats}>
-            <StatLine num={stats.total_queries} label="总查询" />
-            <StatLine num={stats.unique_words} label="不重复" />
-            <StatLine num={stats.top_day?.[1] ?? 0} label="单日最高" />
+          <div class="side-stats">
+            <div class="stat">
+              <span class="stat-num">{stats.total_queries}</span>
+              <span class="stat-label">总查询</span>
+            </div>
+            <div class="stat">
+              <span class="stat-num">{stats.unique_words}</span>
+              <span class="stat-label">不重复</span>
+            </div>
+            <div class="stat">
+              <span class="stat-num">{today.length}</span>
+              <span class="stat-label">今日</span>
+            </div>
           </div>
         )}
-
-        <div style={s.sideFooter}>
-          <div style={s.providerList}>
-            {stats?.provider_breakdown.map(([p, c]) => (
-              <span key={p} style={s.providerBadge}>
-                {p} <span style={s.providerCnt}>{c}</span>
-              </span>
-            ))}
-          </div>
-        </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <main style={s.main}>
+      <main class="main">
         {tab === "today" && <TodayView entries={today} />}
         {tab === "weekly" && <WeeklyView entries={weekly} />}
         {tab === "review" && <ReviewView entries={review} />}
         {tab === "history" && (
           <HistoryView
             entries={history}
-            search={search}
-            onSearch={setSearch}
+            query={historyQ}
+            onQuery={setHistoryQ}
           />
         )}
+        {tab === "web" && <WebSearchView />}
       </main>
     </div>
   );
 }
 
-function StatLine({ num, label }: { num: number; label: string }) {
-  return (
-    <div style={s.statLine}>
-      <span style={s.statNum}>{num}</span>
-      <span style={s.statLabel}>{label}</span>
-    </div>
-  );
-}
-
 function TodayView({ entries }: { entries: HistoryEntry[] }) {
-  const [expanded, setExpanded] = useState<number | null>(null);
-
   return (
-    <div>
-      <div style={s.pageHeader}>
-        <h2 style={s.pageTitle}>今日查询</h2>
-        <span style={s.badge}>{entries.length} 次</span>
-      </div>
+    <section>
+      <header class="page-head">
+        <div>
+          <h1 class="page-title">今日</h1>
+          <p class="page-sub">今天查过的词与解释</p>
+        </div>
+        <span class="page-meta">{entries.length} 次</span>
+      </header>
       {!entries.length ? (
-        <p style={s.empty}>还没有记录</p>
+        <p class="empty">
+          还没有记录。选中文字后复制，或运行 <strong>ah grab</strong>
+        </p>
       ) : (
-        <Table entries={entries} expanded={expanded} onToggle={setExpanded} />
+        <Feed entries={entries} />
       )}
-    </div>
+    </section>
   );
 }
 
 function WeeklyView({ entries }: { entries: WeeklyEntry[] }) {
-  const total = entries.reduce((s, d) => s + d.total, 0);
+  const total = entries.reduce((sum, d) => sum + d.total, 0);
   return (
-    <div>
-      <div style={s.pageHeader}>
-        <h2 style={s.pageTitle}>本周学习</h2>
-        <span style={s.badge}>{total} 次 / {entries.length} 天</span>
-      </div>
-      {!entries.length ? (
-        <p style={s.empty}>暂无数据</p>
-      ) : (
-        <div style={s.weekGrid}>
-          {entries.map((day) => (
-            <div key={day.day} style={s.dayCard}>
-              <div style={s.dayHeader}>{day.day.slice(5)}</div>
-              <div style={s.dayTotal}>{day.total} 次</div>
-              {day.words.slice(0, 8).map((w) => (
-                <div key={w.word} style={s.dayWord}>
-                  <span style={s.dayWordName}>{w.word}</span>
-                  <span style={s.dayWordTrans}>{w.translation}</span>
-                  <span style={s.dayWordCnt}>{w.count}</span>
-                </div>
-              ))}
-              {day.words.length > 8 && (
-                <div style={s.dayMore}>+{day.words.length - 8} 更多</div>
-              )}
-            </div>
-          ))}
+    <section>
+      <header class="page-head">
+        <div>
+          <h1 class="page-title">本周</h1>
+          <p class="page-sub">按天回顾学习痕迹</p>
         </div>
-      )}
-    </div>
-  );
-}
-
-function ReviewView({ entries }: { entries: ReviewEntry[] }) {
-  return (
-    <div>
-      <div style={s.pageHeader}>
-        <h2 style={s.pageTitle}>需要复习</h2>
-        <span style={s.badge}>{entries.length} 个词</span>
-      </div>
+        <span class="page-meta">
+          {total} 次 · {entries.length} 天
+        </span>
+      </header>
       {!entries.length ? (
-        <p style={s.empty}>全部掌握！</p>
+        <p class="empty">本周暂无数据</p>
       ) : (
-        <div style={s.reviewGrid}>
-          {entries.map((e) => (
-            <div key={e.word} style={s.reviewCard}>
-              <div style={s.reviewWord}>{e.word}</div>
-              <div style={s.reviewTrans}>{e.translation}</div>
-              <div style={s.reviewMeta}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    color:
-                      e.days_ago > 14
-                        ? "#f87171"
-                        : e.days_ago > 7
-                          ? "#fbbf24"
-                          : "#64748b",
-                    fontWeight: e.days_ago > 14 ? 600 : 400,
-                  }}
-                >
-                  {e.days_ago} 天前
-                </span>
+        <div class="week-list">
+          {entries.map((day) => (
+            <div key={day.day} class="week-day">
+              <div class="week-day-head">
+                <span class="week-day-date">{day.day.slice(5)}</span>
+                <span class="week-day-total">{day.total} 次</span>
+              </div>
+              <div class="week-words">
+                {day.words.slice(0, 8).map((w) => (
+                  <div key={w.word} class="week-word">
+                    <span class="week-word-name">{w.word}</span>
+                    <span class="week-word-trans">{w.translation}</span>
+                    <span class="week-word-cnt">{w.count}</span>
+                  </div>
+                ))}
+                {day.words.length > 8 && (
+                  <div class="week-word-cnt">+{day.words.length - 8} 更多</div>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </section>
+  );
+}
+
+function ReviewView({ entries }: { entries: ReviewEntry[] }) {
+  return (
+    <section>
+      <header class="page-head">
+        <div>
+          <h1 class="page-title">复习</h1>
+          <p class="page-sub">久未见面的词</p>
+        </div>
+        <span class="page-meta">{entries.length} 个</span>
+      </header>
+      {!entries.length ? (
+        <p class="empty">暂时没有需要复习的词</p>
+      ) : (
+        <div class="review-list">
+          {entries.map((e) => (
+            <div key={e.word} class="review-item">
+              <span class="review-word">{e.word}</span>
+              <span class="review-trans">{e.translation}</span>
+              <span
+                class={`review-ago${
+                  e.days_ago > 14 ? " old" : e.days_ago > 7 ? " stale" : ""
+                }`}
+              >
+                {e.days_ago} 天前
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
 function HistoryView({
   entries,
-  search,
-  onSearch,
+  query,
+  onQuery,
 }: {
   entries: HistoryEntry[];
-  search: string;
-  onSearch: (s: string) => void;
+  query: string;
+  onQuery: (s: string) => void;
 }) {
+  return (
+    <section>
+      <header class="page-head">
+        <div>
+          <h1 class="page-title">历史</h1>
+          <p class="page-sub">在本地记录里查找</p>
+        </div>
+        <span class="page-meta">{entries.length} 条</span>
+      </header>
+      <input
+        class="search-box"
+        type="search"
+        placeholder="搜索词、翻译、解释…"
+        value={query}
+        onInput={(e) => onQuery((e.target as HTMLInputElement).value)}
+      />
+      {!entries.length ? (
+        <p class="empty">无匹配结果</p>
+      ) : (
+        <Feed entries={entries} />
+      )}
+    </section>
+  );
+}
+
+function WebSearchView() {
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [results, setResults] = useState<WebHit[]>([]);
+  const [lastQuery, setLastQuery] = useState("");
+
+  useEffect(() => {
+    const query = q.trim();
+    if (!query) {
+      setResults([]);
+      setError(null);
+      setLastQuery("");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const t = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(query)}&limit=10`)
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok || data.error) {
+            throw new Error(data.error || `HTTP ${r.status}`);
+          }
+          setResults(data.results || []);
+          setLastQuery(data.query || query);
+          setError(null);
+        })
+        .catch((e: Error) => {
+          setResults([]);
+          setError(e.message || "搜索失败");
+        })
+        .finally(() => setLoading(false));
+    }, 350);
+
+    return () => clearTimeout(t);
+  }, [q]);
+
+  return (
+    <section>
+      <header class="page-head">
+        <div>
+          <h1 class="page-title">搜索</h1>
+          <p class="page-sub">经 SearXNG 检索网页</p>
+        </div>
+        <span class="page-meta">
+          {loading ? "搜索中" : results.length ? `${results.length} 条` : ""}
+        </span>
+      </header>
+      <input
+        class="search-box"
+        type="search"
+        placeholder="输入关键词，实时显示结果…"
+        value={q}
+        onInput={(e) => setQ((e.target as HTMLInputElement).value)}
+        autoFocus
+      />
+      {loading && <p class="empty">搜索中…</p>}
+      {!loading && error && (
+        <p class="empty">
+          <strong>{error}</strong>
+          <br />
+          确认 SearXNG 已启动，且 searxng_url 配置正确
+        </p>
+      )}
+      {!loading && !error && !q.trim() && (
+        <p class="empty">开始输入后，结果会出现在下方</p>
+      )}
+      {!loading && !error && q.trim() && !results.length && (
+        <p class="empty">没有找到「{lastQuery || q}」</p>
+      )}
+      {!loading && results.length > 0 && (
+        <div class="web-list">
+          {results.map((r) => (
+            <a
+              key={r.url}
+              class="web-card"
+              href={r.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <div class="web-title">{r.title}</div>
+              <div class="web-url">{r.url}</div>
+              <div class="web-snippet">{r.snippet}</div>
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Feed({ entries }: { entries: HistoryEntry[] }) {
   const [expanded, setExpanded] = useState<number | null>(null);
 
   return (
-    <div>
-      <div style={s.pageHeader}>
-        <h2 style={s.pageTitle}>历史记录</h2>
-        <span style={s.badge}>{entries.length} 条</span>
-      </div>
-      <input
-        type="text"
-        placeholder="搜索词、翻译、解释..."
-        value={search}
-        onInput={(e) => onSearch((e.target as HTMLInputElement).value)}
-        style={s.search}
-      />
-      {!entries.length ? (
-        <p style={s.empty}>无匹配</p>
-      ) : (
-        <Table entries={entries} expanded={expanded} onToggle={setExpanded} />
-      )}
-    </div>
-  );
-}
-
-function Table({
-  entries,
-  expanded,
-  onToggle,
-}: {
-  entries: HistoryEntry[];
-  expanded: number | null;
-  onToggle: (id: number | null) => void;
-}) {
-  return (
-    <div style={s.table}>
-      {entries.map((e) => (
-        <div key={e.id}>
-          <div
-            style={s.row}
-            onClick={() => onToggle(expanded === e.id ? null : e.id)}
-          >
-            <span style={s.cellWord}>{e.word}</span>
-            <span style={s.cellTrans}>{e.translation}</span>
-            <span style={s.cellProvider}>{e.provider}</span>
-            <span style={s.cellTime}>{e.created_at.slice(5, 16)}</span>
+    <div class="feed">
+      {entries.map((e) => {
+        const open = expanded === e.id;
+        return (
+          <div key={e.id} class="feed-item">
+            <button
+              class="feed-row"
+              onClick={() => setExpanded(open ? null : e.id)}
+              aria-expanded={open}
+            >
+              <span class="feed-word">{e.word}</span>
+              <span class="feed-trans">{e.translation}</span>
+              <span class="feed-provider">{e.provider}</span>
+              <span class="feed-time">{e.created_at.slice(5, 16)}</span>
+            </button>
+            {open && (
+              <div class="feed-detail">
+                {e.explanation && (
+                  <div class="feed-detail-block">
+                    <div class="feed-detail-label">解释</div>
+                    <div class="feed-detail-text">{e.explanation}</div>
+                  </div>
+                )}
+                {e.usage_example && (
+                  <div class="feed-detail-block">
+                    <div class="feed-detail-label">用法</div>
+                    <pre class="feed-detail-code">{e.usage_example}</pre>
+                  </div>
+                )}
+                {e.context_file && (
+                  <div class="feed-detail-block">
+                    <div class="feed-detail-label">文件</div>
+                    <div class="feed-detail-text">
+                      {e.context_file}
+                      {e.context_language ? ` · ${e.context_language}` : ""}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          {expanded === e.id && (
-            <div style={s.expanded}>
-              {e.explanation && (
-                <>
-                  <div style={s.expLabel}>解释</div>
-                  <div style={s.expText}>{e.explanation}</div>
-                </>
-              )}
-              {e.usage_example && (
-                <>
-                  <div style={s.expLabel}>用法</div>
-                  <pre style={s.expCode}>{e.usage_example}</pre>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
-
-const s: Record<string, JSX.CSSProperties> = {
-  layout: {
-    display: "flex",
-    height: "100vh",
-    background: "#0b0e14",
-    color: "#e2e8f0",
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  sidebar: {
-    width: 220,
-    flexShrink: 0,
-    background: "#11161e",
-    borderRight: "1px solid #1e2530",
-    display: "flex",
-    flexDirection: "column",
-    padding: "24px 12px",
-    gap: 24,
-  },
-  logo: { fontSize: 20, fontWeight: 700, padding: "0 8px" },
-  logoAccent: { color: "#60a5fa" },
-  logoDim: { color: "#475569", fontWeight: 400 },
-  nav: { display: "flex", flexDirection: "column", gap: 2 },
-  navItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "10px 12px",
-    border: "none",
-    borderRadius: 8,
-    background: "transparent",
-    color: "#94a3b8",
-    fontSize: 14,
-    cursor: "pointer",
-    textAlign: "left",
-    width: "100%",
-    transition: "all .15s",
-  },
-  navItemActive: {
-    background: "#1e293b",
-    color: "#e2e8f0",
-    fontWeight: 600,
-  },
-  navIcon: { width: 20, textAlign: "center" as const, fontSize: 14 },
-  sideStats: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-    padding: "16px 12px",
-    background: "#0b0e14",
-    borderRadius: 8,
-    border: "1px solid #1e2530",
-  },
-  statLine: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  statNum: { fontSize: 18, fontWeight: 700, color: "#60a5fa" },
-  statLabel: { fontSize: 12, color: "#64748b" },
-  sideFooter: { marginTop: "auto" },
-  providerList: { display: "flex", flexWrap: "wrap", gap: 6 },
-  providerBadge: {
-    fontSize: 11,
-    padding: "4px 8px",
-    background: "#1e293b",
-    borderRadius: 4,
-    color: "#94a3b8",
-  },
-  providerCnt: { color: "#60a5fa", fontWeight: 600 },
-
-  main: {
-    flex: 1,
-    overflow: "auto",
-    padding: "32px 40px",
-    minWidth: 0,
-  },
-  pageHeader: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 24,
-  },
-  pageTitle: { fontSize: 22, fontWeight: 700, color: "#f1f5f9", margin: 0 },
-  badge: {
-    fontSize: 12,
-    padding: "4px 10px",
-    background: "#1e293b",
-    borderRadius: 12,
-    color: "#94a3b8",
-  },
-  search: {
-    width: "100%",
-    padding: "10px 14px",
-    background: "#0b0e14",
-    border: "1px solid #1e2530",
-    borderRadius: 8,
-    color: "#e2e8f0",
-    fontSize: 14,
-    outline: "none",
-    marginBottom: 16,
-    boxSizing: "border-box",
-  },
-
-  // Weekly
-  weekGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-    gap: 16,
-  },
-  dayCard: {
-    background: "#11161e",
-    border: "1px solid #1e2530",
-    borderRadius: 10,
-    padding: 16,
-  },
-  dayHeader: { fontSize: 14, fontWeight: 600, color: "#f1f5f9", marginBottom: 4 },
-  dayTotal: { fontSize: 12, color: "#64748b", marginBottom: 12 },
-  dayWord: {
-    display: "flex",
-    gap: 8,
-    padding: "4px 0",
-    fontSize: 13,
-    alignItems: "center",
-  },
-  dayWordName: { color: "#60a5fa", fontWeight: 500, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  dayWordTrans: { color: "#94a3b8", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12 },
-  dayWordCnt: {
-    color: "#475569",
-    fontSize: 11,
-    background: "#1e293b",
-    padding: "1px 6px",
-    borderRadius: 4,
-  },
-  dayMore: { fontSize: 12, color: "#475569", marginTop: 8 },
-
-  // Review
-  reviewGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-    gap: 12,
-  },
-  reviewCard: {
-    background: "#11161e",
-    border: "1px solid #1e2530",
-    borderRadius: 10,
-    padding: 16,
-  },
-  reviewWord: { fontSize: 15, fontWeight: 600, color: "#60a5fa", marginBottom: 4 },
-  reviewTrans: { fontSize: 13, color: "#94a3b8", marginBottom: 8 },
-  reviewMeta: {},
-  // Table
-  table: { borderRadius: 8, overflow: "hidden", border: "1px solid #1e2530" },
-  row: {
-    display: "flex",
-    gap: 12,
-    padding: "10px 14px",
-    borderBottom: "1px solid #1e2530",
-    fontSize: 14,
-    cursor: "pointer",
-    alignItems: "center",
-    background: "#11161e",
-  },
-  cellWord: { color: "#60a5fa", fontWeight: 500, minWidth: 140, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  cellTrans: { color: "#e2e8f0", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 300 },
-  cellProvider: { color: "#64748b", fontSize: 12, minWidth: 60 },
-  cellTime: { color: "#475569", fontSize: 12, marginLeft: "auto", whiteSpace: "nowrap" },
-  expanded: {
-    padding: "14px 16px",
-    background: "#0b0e14",
-    borderBottom: "1px solid #1e2530",
-    fontSize: 13,
-    lineHeight: 1.6,
-  },
-  expLabel: { color: "#64748b", fontSize: 11, textTransform: "uppercase" as const, marginBottom: 4 },
-  expText: { color: "#e2e8f0", marginBottom: 8, whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const },
-  expCode: {
-    background: "#0b0e14",
-    padding: "8px 12px",
-    borderRadius: 6,
-    fontSize: 12,
-    color: "#4ade80",
-    whiteSpace: "pre-wrap" as const,
-    wordBreak: "break-word" as const,
-    border: "1px solid #1e2530",
-  },
-  empty: { padding: 40, textAlign: "center" as const, color: "#475569", fontSize: 14 },
-};
