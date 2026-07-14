@@ -329,6 +329,64 @@ pub fn clear_history() -> Result<usize> {
     Ok(count)
 }
 
+pub fn query_max_id() -> Result<Option<i64>> {
+    let conn = init()?;
+    let mut stmt = conn.prepare("SELECT MAX(id) FROM queries")?;
+    let max = stmt.query_row([], |r| r.get::<_, Option<i64>>(0))?;
+    Ok(max)
+}
+
+pub fn list_queries_since(last_id: i64, limit: usize) -> Result<Vec<HistoryEntry>> {
+    let conn = init()?;
+    let mut stmt = conn.prepare(
+        "SELECT id, word, provider, translation, explanation, usage_example, context_file, context_language, created_at, sources_json
+         FROM queries WHERE id > ?1 ORDER BY id ASC LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(params![last_id, limit as i64], row_to_entry)?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DailyTrend {
+    pub date: String,
+    pub count: i64,
+}
+
+pub fn query_daily_trend(days: usize) -> Result<Vec<DailyTrend>> {
+    let conn = init()?;
+    let mut stmt = conn.prepare(
+        "SELECT date(created_at) as day, COUNT(*) as cnt
+         FROM queries
+         WHERE created_at >= date('now', ?1)
+         GROUP BY day ORDER BY day ASC",
+    )?;
+    let rows = stmt.query_map(params![format!("-{} days", days)], |r| {
+        Ok(DailyTrend { date: r.get(0)?, count: r.get(1)? })
+    })?;
+    let mut trends: Vec<DailyTrend> = rows.filter_map(|r| r.ok()).collect();
+    // Fill in missing days with 0
+    if let (Some(first), Some(_last)) = (trends.first().cloned(), trends.last().cloned()) {
+        let start = chrono::NaiveDate::parse_from_str(&first.date, "%Y-%m-%d").ok();
+        let end = chrono::Local::now().naive_local().date();
+        if let Some(mut current) = start {
+            let mut filled = Vec::new();
+            let mut idx = 0;
+            while current <= end {
+                let ds = current.format("%Y-%m-%d").to_string();
+                if idx < trends.len() && trends[idx].date == ds {
+                    filled.push(trends[idx].clone());
+                    idx += 1;
+                } else {
+                    filled.push(DailyTrend { date: ds, count: 0 });
+                }
+                current += chrono::Duration::days(1);
+            }
+            trends = filled;
+        }
+    }
+    Ok(trends)
+}
+
 fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryEntry> {
     Ok(HistoryEntry {
         id: row.get(0)?,

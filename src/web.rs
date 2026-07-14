@@ -2,14 +2,18 @@ use anyhow::Result;
 use axum::{
     extract::{Query, State},
     http::{header, StatusCode, Uri},
+    response::sse::{Event, Sse, KeepAlive},
     response::{Html, IntoResponse, Json, Response},
     routing::get,
     Router,
 };
+use futures_util::stream::{Stream, StreamExt};
 use rust_embed::Embed;
 use serde::Deserialize;
-use std::sync::Arc;
+use std::convert::Infallible;
+use std::time::Duration;
 
+#[derive(Clone)]
 struct AppState;
 
 #[derive(Deserialize)]
@@ -24,14 +28,16 @@ struct HistoryQuery {
 struct Assets;
 
 pub async fn serve(port: u16) -> Result<()> {
-    let state = Arc::new(AppState);
+    let state = AppState;
 
     let app = Router::new()
         .route("/api/history", get(api_history))
+        .route("/api/history/trends", get(api_trends))
         .route("/api/stats", get(api_stats))
         .route("/api/today", get(api_today))
         .route("/api/weekly", get(api_weekly))
         .route("/api/review", get(api_review))
+        .route("/api/events", get(api_events))
         .fallback(static_handler)
         .with_state(state);
 
@@ -62,7 +68,10 @@ fn embed_response(path: &str, data: &[u8]) -> Response {
     let mime = content_type(path);
     (
         StatusCode::OK,
-        [(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, cache_control(path))],
+        [
+            (header::CONTENT_TYPE, mime),
+            (header::CACHE_CONTROL, cache_control(path)),
+        ],
         data.to_vec(),
     )
         .into_response()
@@ -93,31 +102,31 @@ fn cache_control(path: &str) -> &'static str {
 
 async fn api_history(
     Query(q): Query<HistoryQuery>,
-    State(_): State<Arc<AppState>>,
+    State(_): State<AppState>,
 ) -> impl IntoResponse {
     let limit = q.limit.unwrap_or(100);
     match crate::history::list_queries(limit, q.search.as_deref()) {
         Ok(entries) => Json(serde_json::json!(entries)).into_response(),
         Err(e) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
         )
             .into_response(),
     }
 }
 
-async fn api_stats(State(_): State<Arc<AppState>>) -> impl IntoResponse {
+async fn api_stats(State(_): State<AppState>) -> impl IntoResponse {
     match crate::history::query_stats() {
         Ok(stats) => Json(serde_json::json!(stats)).into_response(),
         Err(e) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
         )
             .into_response(),
     }
 }
 
-async fn api_today(State(_): State<Arc<AppState>>) -> impl IntoResponse {
+async fn api_today(State(_): State<AppState>) -> impl IntoResponse {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     match crate::history::list_queries(1000, None) {
         Ok(entries) => {
@@ -128,33 +137,72 @@ async fn api_today(State(_): State<Arc<AppState>>) -> impl IntoResponse {
             Json(serde_json::json!(today_entries)).into_response()
         }
         Err(e) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
         )
             .into_response(),
     }
 }
 
-async fn api_weekly(State(_): State<Arc<AppState>>) -> impl IntoResponse {
+async fn api_weekly(State(_): State<AppState>) -> impl IntoResponse {
     match crate::history::query_weekly() {
         Ok(entries) => Json(serde_json::json!(entries)).into_response(),
         Err(e) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
         )
             .into_response(),
     }
 }
 
-async fn api_review(State(_): State<Arc<AppState>>) -> impl IntoResponse {
+async fn api_review(State(_): State<AppState>) -> impl IntoResponse {
     match crate::history::query_review() {
         Ok(entries) => Json(serde_json::json!(entries)).into_response(),
         Err(e) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
         )
             .into_response(),
     }
+}
+
+async fn api_trends(State(_): State<AppState>) -> impl IntoResponse {
+    match crate::history::query_daily_trend(30) {
+        Ok(trends) => Json(serde_json::json!(trends)).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+async fn api_events(
+    State(_state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let stream = futures_util::stream::unfold(
+        0i64,
+        |mut last_id| async move {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            let current_max = crate::history::query_max_id().unwrap_or(None).unwrap_or(0);
+            if current_max <= last_id {
+                return Some((
+                    futures_util::stream::iter(vec![Ok(Event::default().data("ping"))]),
+                    last_id,
+                ));
+            }
+            let entries =
+                crate::history::list_queries_since(last_id, 50).unwrap_or_default();
+            let new_last = entries.last().map(|e| e.id).unwrap_or(current_max);
+            let events: Vec<Result<Event, Infallible>> = entries
+                .into_iter()
+                .map(|e| Ok(Event::default().json_data(e).unwrap_or_default()))
+                .collect();
+            Some((futures_util::stream::iter(events), new_last))
+        },
+    )
+    .flatten();
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 const FALLBACK_HTML: &str = r#"<!DOCTYPE html>

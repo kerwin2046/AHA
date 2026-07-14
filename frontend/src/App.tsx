@@ -40,12 +40,18 @@ type ReviewEntry = {
   days_ago: number;
 };
 
+type DailyTrend = {
+  date: string;
+  count: number;
+};
+
 function api(path: string) {
   return fetch(path).then((r) => r.json());
 }
 
 const NAV = [
   { key: "today", label: "今日" },
+  { key: "trends", label: "趋势" },
   { key: "weekly", label: "本周" },
   { key: "review", label: "足迹" },
   { key: "history", label: "历史" },
@@ -61,6 +67,8 @@ export default function App() {
   const [review, setReview] = useState<ReviewEntry[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyQ, setHistoryQ] = useState("");
+  const [trends, setTrends] = useState<DailyTrend[]>([]);
+  const [liveOnline, setLiveOnline] = useState(false);
 
   useEffect(() => {
     api("/api/stats").then(setStats);
@@ -68,6 +76,7 @@ export default function App() {
     api("/api/history?limit=200").then(setHistory);
     api("/api/weekly").then(setWeekly).catch(() => {});
     api("/api/review").then(setReview).catch(() => {});
+    api("/api/history/trends").then(setTrends).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -79,6 +88,30 @@ export default function App() {
     }, 300);
     return () => clearTimeout(t);
   }, [historyQ]);
+
+  useEffect(() => {
+    const es = new EventSource("/api/events");
+    es.onopen = () => setLiveOnline(true);
+    es.onmessage = (e: MessageEvent) => {
+      if (e.data === "ping" || e.data === "connected") return;
+      try {
+        const entry: HistoryEntry = JSON.parse(e.data);
+        setToday(prev => {
+          const exists = prev.some(e => e.id === entry.id);
+          return exists ? prev : [entry, ...prev];
+        });
+        setHistory(prev => {
+          const exists = prev.some(e => e.id === entry.id);
+          return exists ? prev : [entry, ...prev];
+        });
+      } catch {}
+    };
+    es.onerror = () => {
+      setLiveOnline(false);
+    };
+    return () => es.close();
+  }, []);
+
 
   const counts: Partial<Record<Tab, number>> = {
     today: today.length,
@@ -125,10 +158,16 @@ export default function App() {
             </div>
           </div>
         )}
+
+        <div class="live-indicator">
+          <span class={`live-dot${liveOnline ? " active" : " offline"}`} />
+          <span>{liveOnline ? "守护在线" : "未连接守护"}</span>
+        </div>
       </aside>
 
       <main class="main">
         {tab === "today" && <TodayView entries={today} />}
+        {tab === "trends" && <TrendsView stats={stats} trends={trends} />}
         {tab === "weekly" && <WeeklyView entries={weekly} />}
         {tab === "review" && <ReviewView entries={review} />}
         {tab === "history" && (
@@ -350,5 +389,129 @@ function Feed({ entries }: { entries: HistoryEntry[] }) {
         );
       })}
     </div>
+  );
+}
+
+const COLORS = ["#58a6ff", "#3fb950", "#d29922", "#f78166", "#bc8cff", "#ff7b72"];
+
+function BarChart({ data, maxItems = 10 }: { data: { label: string; value: number }[]; maxItems?: number }) {
+  const items = data.slice(0, maxItems);
+  const maxVal = Math.max(...items.map(d => d.value), 1);
+  return (
+    <div class="chart-container">
+      <h3 class="chart-title">高频词</h3>
+      <div class="bar-chart">
+        {items.map((d, i) => (
+          <div key={d.label} class="bar-row">
+            <span class="bar-label">{d.label}</span>
+            <div class="bar-track">
+              <div
+                class="bar-fill"
+                style={{ width: `${(d.value / maxVal) * 100}%`, background: COLORS[i % COLORS.length] }}
+              />
+            </div>
+            <span class="bar-value">{d.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DonutChart({ data }: { data: { label: string; value: number }[] }) {
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
+  let offset = 0;
+  const R = 60, CIRC = 2 * Math.PI * R;
+  const segments = data.map((d, i) => {
+    const frac = d.value / total;
+    const len = frac * CIRC;
+    const seg = (
+      <circle
+        key={d.label}
+        cx="80" cy="80" r={R}
+        fill="none"
+        stroke={COLORS[i % COLORS.length]}
+        stroke-width="16"
+        stroke-dasharray={`${len} ${CIRC - len}`}
+        stroke-dashoffset={-offset}
+      />
+    );
+    offset += len;
+    return seg;
+  });
+  return (
+    <div class="chart-container">
+      <h3 class="chart-title">服务商分布</h3>
+      <svg viewBox="0 0 160 160" class="donut-svg">
+        <circle cx="80" cy="80" r={R} fill="none" stroke="var(--line)" stroke-width="16" />
+        {segments}
+      </svg>
+      <div class="donut-legend">
+        {data.map((d, i) => (
+          <div key={d.label} class="legend-item">
+            <span class="legend-dot" style={{ background: COLORS[i % COLORS.length] }} />
+            <span class="legend-label">{d.label}</span>
+            <span class="legend-value">{d.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TrendChart({ data }: { data: { date: string; count: number }[] }) {
+  if (!data.length) return null;
+  const W = 600, H = 200, PAD = 30;
+  const maxC = Math.max(...data.map(d => d.count), 1);
+  const xGap = (W - PAD * 2) / Math.max(data.length - 1, 1);
+  const pts = data.map((d, i) => `${PAD + i * xGap},${H - PAD - (d.count / maxC) * (H - PAD * 2)}`).join(" ");
+  const fillPts = `${PAD + 0 * xGap},${H - PAD} ${pts} ${PAD + (data.length - 1) * xGap},${H - PAD}`;
+  const every = Math.max(1, Math.floor(data.length / 7));
+  return (
+    <div class="chart-container">
+      <h3 class="chart-title">30 天查询趋势</h3>
+      <svg viewBox={`0 0 ${W} ${H}`} class="trend-svg">
+        <defs>
+          <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.3" />
+            <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02" />
+          </linearGradient>
+        </defs>
+        <polygon points={fillPts} fill="url(#trend-fill)" />
+        <polyline points={pts} fill="none" stroke="var(--accent)" stroke-width="2" />
+        {data.map((d, i) => (
+          i % every === 0 ? (
+            <text key={d.date} x={PAD + i * xGap} y={H - 6} text-anchor="middle" class="trend-label" font-size="10">
+              {d.date.slice(5)}
+            </text>
+          ) : null
+        ))}
+        {[0, Math.round(maxC / 2), maxC].map(v => (
+          <text key={v} x={PAD - 4} y={H - PAD - (v / maxC) * (H - PAD * 2) + 4} text-anchor="end" class="trend-label" font-size="10">
+            {v}
+          </text>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function TrendsView({ stats, trends }: { stats: Stats | null; trends: DailyTrend[] }) {
+  const words = stats?.top_words?.map(([label, value]) => ({ label, value })) || [];
+  const providers = stats?.provider_breakdown?.map(([label, value]) => ({ label, value })) || [];
+  return (
+    <section>
+      <header class="page-head">
+        <div>
+          <h1 class="page-title">趋势</h1>
+          <p class="page-sub">查询活动的可视化概览</p>
+        </div>
+      </header>
+      <div class="trends-grid">
+        <TrendChart data={trends} />
+        <BarChart data={words} maxItems={10} />
+        <DonutChart data={providers} />
+      </div>
+    </section>
   );
 }

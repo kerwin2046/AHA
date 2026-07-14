@@ -519,6 +519,164 @@ input {
   }
 }
 
+/* ── Live indicator ── */
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.live-dot.active {
+  background: #3fb950;
+  box-shadow: 0 0 6px #3fb95080;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.live-dot.offline {
+  background: #484f58;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ── Trends page ── */
+
+.trends-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 8px;
+}
+
+.trends-grid > .chart-container:first-child {
+  grid-column: 1 / -1;
+}
+
+.chart-container {
+  background: var(--bg-inset);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-faint);
+  margin: 0 0 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Bar chart ── */
+
+.bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar-label {
+  font-size: 13px;
+  color: var(--text);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-track {
+  height: 18px;
+  background: var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.bar-value {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Donut chart ── */
+
+.donut-svg {
+  display: block;
+  margin: 0 auto;
+  max-width: 160px;
+}
+
+.donut-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-label {
+  color: var(--text);
+}
+
+.legend-value {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Trend chart ── */
+
+.trend-svg {
+  display: block;
+  width: 100%;
+}
+
+.trend-label {
+  fill: var(--text-faint);
+  font-family: inherit;
+}
+
 @media (max-width: 860px) {
   .app {
     grid-template-columns: 1fr;
@@ -555,5 +713,13 @@ input {
   .feed-time,
   .review-ago {
     justify-self: start;
+  }
+
+  .trends-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bar-row {
+    grid-template-columns: 70px 1fr 30px;
   }
 }
