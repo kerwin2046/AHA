@@ -495,7 +495,7 @@ model = "gpt-4o-mini"
 # api_key = "sk-..."
 
 [provider.deepseek]
-model = "deepseek-chat"
+model = "deepseek-v4-flash"
 url = "https://api.deepseek.com/v1"
 # Set TX_DEEPSEEK_KEY env var, or uncomment:
 # api_key = "sk-..."

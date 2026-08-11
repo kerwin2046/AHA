@@ -261,7 +261,7 @@ model = "gpt-4o-mini"
 # api_key = "sk-..."    # 或通过环境变量
 
 [provider.deepseek]
-model = "deepseek-chat"
+model = "deepseek-v4-flash"
 url = "https://api.deepseek.com/v1"
 
 [display]
